@@ -15,7 +15,8 @@ from torch.autograd import Variable
 
 import softsplat
 
-from raft import RAFT
+# from raft import RAFT
+from sparsenet import SparseNet
 from utils import flow_viz
 from utils.utils import InputPadder
 
@@ -167,9 +168,9 @@ if __name__ == '__main__':
     model.eval()
     transform = transforms.Compose([transforms.ToTensor()])
     
-    # RAFT
-    flow_model = torch.nn.DataParallel(RAFT(args))
-    flow_model.load_state_dict(torch.load('raft_models/raft-things.pth'))
+    # SparseNet
+    flow_model = torch.nn.DataParallel(SparseNet(args))
+    flow_model.load_state_dict(torch.load('checkpoints/quarter/scv-things.pth'))
     flow_model = flow_model.module
     flow_model.to('cuda')
     flow_model.eval()
@@ -276,7 +277,7 @@ if __name__ == '__main__':
                 """forward_flow[forward_flow != forward_flow] = 0
                 forward_flow[forward_flow > 448] = 0
                 forward_flow[forward_flow < (-448)] = 0"""
-                # cut off padding pixels done by RAFT
+                # cut off padding pixels done by SparseNet
                 flow_H = list(forward_flow.size())[2]
                 flow_W = list(forward_flow.size())[3]
                 if H != flow_H:

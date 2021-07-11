@@ -87,8 +87,7 @@ class FlowDataset(data.Dataset):
         else:
             valid = (flow[0].abs() < 1000) & (flow[1].abs() < 1000)
 
-        return img1, img2, flow, valid.float()
-
+        return img1, img2, flow, valid.float()#, self.extra_info[index]
 
     def __rmul__(self, v):
         self.flow_list = v * self.flow_list
@@ -97,7 +96,7 @@ class FlowDataset(data.Dataset):
         
     def __len__(self):
         return len(self.image_list)
-        
+
 
 class MpiSintel(FlowDataset):
     def __init__(self, aug_params=None, split='training', root='datasets/Sintel', dstype='clean'):
@@ -119,7 +118,7 @@ class MpiSintel(FlowDataset):
 
 
 class FlyingChairs(FlowDataset):
-    def __init__(self, aug_params=None, split='train', root='datasets/FlyingChairs_release/data'):
+    def __init__(self, aug_params=None, split='training', root='datasets/FlyingChairs_release/data'):
         super(FlyingChairs, self).__init__(aug_params)
 
         images = sorted(glob(osp.join(root, '*.ppm')))
@@ -197,7 +196,7 @@ class HD1K(FlowDataset):
 
 
 def fetch_dataloader(args, TRAIN_DS='C+T+K+S+H'):
-    """ Create the data loader for the corresponding trainign set """
+    """ Create the data loader for the corresponding training set """
 
     if args.stage == 'chairs':
         aug_params = {'crop_size': args.image_size, 'min_scale': -0.1, 'max_scale': 1.0, 'do_flip': True}
@@ -227,8 +226,8 @@ def fetch_dataloader(args, TRAIN_DS='C+T+K+S+H'):
         aug_params = {'crop_size': args.image_size, 'min_scale': -0.2, 'max_scale': 0.4, 'do_flip': False}
         train_dataset = KITTI(aug_params, split='training')
 
-    train_loader = data.DataLoader(train_dataset, batch_size=args.batch_size, 
-        pin_memory=False, shuffle=True, num_workers=4, drop_last=True)
+    train_loader = data.DataLoader(train_dataset, batch_size=args.batch_size,
+                                   pin_memory=True, shuffle=True, num_workers=8, drop_last=True)
 
     print('Training with %d image pairs' % len(train_dataset))
     return train_loader
