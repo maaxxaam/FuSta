@@ -1,8 +1,5 @@
 #!/bin/bash
-cd ./networks/correlation_package
-python setup.py install --user
-cd ../resample2d_package 
-python setup.py install --user
-cd ../channelnorm_package 
-python setup.py install --user
+cd ./model/correlation_package/
+python setup.py build
+python setup.py install
 cd ..

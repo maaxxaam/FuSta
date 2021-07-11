@@ -23,7 +23,8 @@ import sys
 import warnings
 
 warnings.filterwarnings("ignore")
-import models_flownet
+# import models_flownet
+from models import FastFlowNet
 import mpi_net35
 import skvideo.io
 from scipy.ndimage.filters import gaussian_filter
@@ -472,8 +473,8 @@ def compute_H(path):
 with torch.no_grad():
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
-    flow_model = models_flownet.FlowNet2().cuda()
-    checkpoint = torch.load('FlowNet2_checkpoint.pth.tar')  #
+    flow_model = FastFlowNet.FastFlowNet().cuda()
+    checkpoint = torch.load('./checkpoints/fastflownet_things3d.pth')  #
     flow_model.load_state_dict(checkpoint['state_dict'])
     flow_model.eval()
 
