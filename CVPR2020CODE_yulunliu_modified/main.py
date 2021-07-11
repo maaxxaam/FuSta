@@ -239,9 +239,9 @@ def compute_flow_seg(video, H, start):
     for i in range(video.shape[0] - 1):
         inp2 = torch.from_numpy(warped_video[i + 1, :, :, :]).float().permute((2, 0, 1)).unsqueeze(0)
         inp1 = torch.from_numpy(warped_video[i, :, :, :]).float().permute((2, 0, 1)).unsqueeze(0)
-        img1, img2, _ = centralize(img1, img2)
+        inp1, inp2, _ = centralize(inp1, inp2)
 
-        height, width = img1.shape[-2:]
+        height, width = inp1.shape[-2:]
         orig_size = (int(height), int(width))
 
         if height % div_size != 0 or width % div_size != 0:
@@ -249,12 +249,12 @@ def compute_flow_seg(video, H, start):
                 int(div_size * np.ceil(height / div_size)), 
                 int(div_size * np.ceil(width / div_size))
             )
-            img1 = F.interpolate(img1, size=input_size, mode='bilinear', align_corners=False)
-            img2 = F.interpolate(img2, size=input_size, mode='bilinear', align_corners=False)
+            inp1 = F.interpolate(inp1, size=input_size, mode='bilinear', align_corners=False)
+            inp2 = F.interpolate(inp2, size=input_size, mode='bilinear', align_corners=False)
         else:
             input_size = orig_size
 
-        input_t = torch.cat([img1, img2], 1).cuda()
+        input_t = torch.cat([inp1, inp2], 1).cuda()
 
         out = flow_model(input_t).data * 2
         out = div_flow * F.interpolate(out, size=input_size, mode='bilinear', align_corners=False)
