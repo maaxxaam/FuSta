@@ -46,6 +46,10 @@ Nkeep = 5
 batchsize = 8
 margin = 64
 
+def centralize(img1, img2):
+    b, c, h, w = img1.shape
+    rgb_mean = torch.cat([img1, img2], dim=2).view(b, c, -1).mean(2).view(b, c, 1, 1)
+    return img1 - rgb_mean, img2 - rgb_mean, rgb_mean
 
 # Network Builders
 builder = ModelBuilder()
@@ -229,11 +233,38 @@ def compute_flow_seg(video, H, start):
 
     warped_video = np.concatenate((warped_video.numpy(), np.tile(np.expand_dims(warped_video[-1, :, :, :].numpy(), 0), (nframe, 1, 1, 1))), 0)
     mask = np.concatenate((mask.numpy(), np.tile(np.expand_dims(mask[-1, :, :].numpy(), 0), (nframe, 1, 1))), 0)
+    div_flow = 20.0
+    div_size = 64
 
     for i in range(video.shape[0] - 1):
-        inp[:, :, 0, :, :] = torch.from_numpy(warped_video[i + 1, :, :, :]).float().cuda().permute((2, 0, 1)).unsqueeze(0)
-        inp[:, :, 1, :, :] = torch.from_numpy(warped_video[i, :, :, :]).float().cuda().permute((2, 0, 1)).unsqueeze(0)
-        out = flow_model(inp) * 2
+        inp2 = torch.from_numpy(warped_video[i + 1, :, :, :]).float().permute((2, 0, 1)).unsqueeze(0)
+        inp1 = torch.from_numpy(warped_video[i, :, :, :]).float().permute((2, 0, 1)).unsqueeze(0)
+        img1, img2, _ = centralize(img1, img2)
+
+        height, width = img1.shape[-2:]
+        orig_size = (int(height), int(width))
+
+        if height % div_size != 0 or width % div_size != 0:
+            input_size = (
+                int(div_size * np.ceil(height / div_size)), 
+                int(div_size * np.ceil(width / div_size))
+            )
+            img1 = F.interpolate(img1, size=input_size, mode='bilinear', align_corners=False)
+            img2 = F.interpolate(img2, size=input_size, mode='bilinear', align_corners=False)
+        else:
+            input_size = orig_size
+
+        input_t = torch.cat([img1, img2], 1).cuda()
+
+        out = flow_model(input_t).data * 2
+        out = div_flow * F.interpolate(out, size=input_size, mode='bilinear', align_corners=False)
+
+        if input_size != orig_size:
+            scale_h = orig_size[0] / input_size[0]
+            scale_w = orig_size[1] / input_size[1]
+            out = F.interpolate(out, size=orig_size, mode='bilinear', align_corners=False)
+            out[:, 0, :, :] *= scale_w
+            out[:, 1, :, :] *= scale_h
 
         out[:, 0, :, :] = out[:, 0, :, :] / (832 + 2 * margin)
         out[:, 1, :, :] = out[:, 1, :, :] / (448 + 2 * margin)
