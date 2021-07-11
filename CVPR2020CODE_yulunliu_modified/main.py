@@ -473,8 +473,8 @@ def compute_H(path):
 with torch.no_grad():
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
-    flow_model = FastFlowNet().cuda().eval()
-    flow_model.load_state_dict(torch.load('./checkpoints/fastflownet_ft_mix.pth'))
+    flow_model = FastFlowNet.FastFlowNet().cuda().eval()
+    flow_model.load_state_dict(torch.load('./checkpoints/fastflownet_things3d.pth'))
 
 
     xv, yv = np.meshgrid(np.linspace(-1, 1, 832 + 2 * margin), np.linspace(-1, 1, 448 + 2 * margin))
