@@ -13,7 +13,7 @@ try:
         torch.ops.load_library(importlib.machinery.PathFinder().find_spec(
             f'{library}_{suffix}', [osp.dirname(__file__)]).origin)
 except AttributeError as e:
-    if os.getenv('BUILD_DOCS', '0') != '1':
+    if os.getenv('BUILD_DOCS', '0') == '1':
         raise AttributeError(e)
 
     from .placeholder import cuda_version_placeholder
@@ -44,7 +44,7 @@ except AttributeError as e:
     torch.ops.torch_scatter.segment_max_coo = segment_coo_arg_placeholder
     torch.ops.torch_scatter.gather_coo = gather_coo_placeholder
 
-if torch.cuda.is_available():  # pragma: no cover
+'''if torch.cuda.is_available():  # pragma: no cover
     cuda_version = torch.ops.torch_scatter.cuda_version()
 
     if cuda_version == -1:
@@ -62,7 +62,7 @@ if torch.cuda.is_available():  # pragma: no cover
             f'{t_major}.{t_minor} and torch_scatter has CUDA version '
             f'{major}.{minor}. Please reinstall the torch_scatter that '
             f'matches your PyTorch install.')
-
+'''
 from .scatter import scatter_sum, scatter_add, scatter_mul  # noqa
 from .scatter import scatter_mean, scatter_min, scatter_max, scatter  # noqa
 from .segment_csr import segment_sum_csr, segment_add_csr  # noqa
