@@ -44,10 +44,8 @@ def load_image_list(image_files):
 
 def calc_flow(img1, img2):
     with torch.no_grad():
+        pass # not used anymore
 
-        images = load_image_list([img1, img2])
-
-        flow_low, flow_up = flow_model(images[0, None], images[1, None], iters=20, test_mode=True)
     return flow_up.detach()
 
 backwarp_tenGrid = {}
@@ -157,7 +155,9 @@ if __name__ == '__main__':
     parser.add_argument('--output_path', type=str)
     parser.add_argument('--temporal_width', type=int, default=41)
     parser.add_argument('--temporal_step', type=int, default=4)
-
+    parser.add_argument('--num_k', type=int, default=8,
+                        help='number of hypotheses to compute for knn Faiss')
+    parser.add_argument('--mixed_precision', default=True, help='use mixed precision')
     args = parser.parse_args()
 
     model = models_arbitrary.Model(args)
@@ -265,11 +265,14 @@ if __name__ == '__main__':
             input_flows = []
             forward_flows = []
             backward_flows = []
+            flow_for, flow_back = None, None
             for frame_shift in range(-(GAUSSIAN_FILTER_KSIZE // 2), (GAUSSIAN_FILTER_KSIZE // 2) + 1, int(args.temporal_step)):
                 # for frame_shift in [-5, 0, 5]:
                 ref_frame = all_imgs[idx + frame_shift]
                 ref_frame_name = os.path.split(ref_frame)[-1]
-                forward_flow = calc_flow(ref_frame, keyframe)
+                images = load_image_list([ref_frame, keyframe])
+
+                flow_for, forward_flow = flow_model(images[0, None], images[1, None], iters=32, test_mode=True, flow_init=flow_for)
                 # forward_flow = np.load(os.path.join(pre_calculated_flow_path, avi_name, ref_frame_name[:-4] + '_' + img_name[:-4] + '.npy'))
                 # forward_flow = torch.FloatTensor(np.ascontiguousarray(forward_flow.astype(np.float32))).cuda()
                 
@@ -277,21 +280,23 @@ if __name__ == '__main__':
                 """forward_flow[forward_flow != forward_flow] = 0
                 forward_flow[forward_flow > 448] = 0
                 forward_flow[forward_flow < (-448)] = 0"""
-                # cut off padding pixels done by SparseNet
-                flow_H = list(forward_flow.size())[2]
+                # cut off padding pixels done by RAFT (not needed?)
+                '''flow_H = list(forward_flow.size())[2]
                 flow_W = list(forward_flow.size())[3]
                 if H != flow_H:
                     top = (flow_H - H) // 2
                     forward_flow = forward_flow[:, :, top:top+H]
                 if W != flow_W:
                     left = (flow_W - W) // 2
-                    forward_flow = forward_flow[:, :, :, left:left+W]
+                    forward_flow = forward_flow[:, :, :, left:left+W]'''
                 print(forward_flow.shape)
                 forward_flows.append(forward_flow)
                 # forward_flow += smoothed_flow
                 # input_flows.append(forward_flow)
                     
-                backward_flow = calc_flow(keyframe, ref_frame)
+                images = load_image_list([keyframe, ref_frame])
+
+                flow_back, backward_flow = flow_model(images[0, None], images[1, None], iters=32, test_mode=True, flow_init=flow_back)
                 # backward_flow = np.load(os.path.join(pre_calculated_flow_path, avi_name, img_name[:-4] + '_' + ref_frame_name[:-4] + '.npy'))
                 # backward_flow = torch.FloatTensor(np.ascontiguousarray(backward_flow.astype(np.float32))).cuda()
                 """backward_flow[backward_flow != backward_flow] = 0

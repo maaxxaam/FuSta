@@ -38,7 +38,7 @@ input_file = sys.argv[1]
 #     os.mkdir(out_dir)
 out_file = sys.argv[2]
 out_warping_field_path = sys.argv[3]
-SEG = 300
+SEG = 200
 
 rho = 0.1
 nframe = 20;
