@@ -186,7 +186,7 @@ class SparseNet(nn.Module):
 
             # F(t+1) = F(t) + \Delta(t)
             coords1 = coords1 + delta_flow
-            flow_small = flow_up # for fetching init flow
+            flow_small = coords1 - coords0 # for fetching init flow
             # upsample predictions
             if up_mask is None:
                 flow_up = upflow4(coords1 - coords0)
