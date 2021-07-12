@@ -42,12 +42,6 @@ def load_image_list(image_files):
     padder = InputPadder(images.shape)
     return padder.pad(images)[0]
 
-def calc_flow(img1, img2):
-    with torch.no_grad():
-        pass # not used anymore
-
-    return flow_up.detach()
-
 backwarp_tenGrid = {}
 backwarp_tenPartial = {}
 
@@ -104,20 +98,11 @@ if __name__ == '__main__':
     parser.add_argument('--gpu_id', type=int, default=0)
 
     # Directory Setting
-    # parser.add_argument('--train', type=str, default='../VideoStabilization/Adobe240/DeepVideoDeblurring_Dataset/DeepVideoDeblurring_Dataset/quantitative_datasets')
-    # parser.add_argument('--out_dir', type=str, default='./output_adacof_train')
-    #parser.add_argument('--load', type=str, default='output/checkpoint/model_epoch042.pth')
     parser.add_argument('--load', type=str, default='FuSta_model/checkpoint/model_epoch050.pth')
-    #parser.add_argument('--load', type=str, default='output_pooling_with_mask_decoder_with_mask_softargmax_with_mask/checkpoint/model_epoch049.pth')
-    # parser.add_argument('--test_input', type=str, default='../VideoStabilization/Adobe240/DeepVideoDeblurring_Dataset/DeepVideoDeblurring_Dataset/quantitative_datasets')
-    # parser.add_argument('--gt', type=str, default='./test_input/middlebury_others/gt')
 
     # Learning Options
     # parser.add_argument('--epochs', type=int, default=50, help='Max Epochs')
     parser.add_argument('--batch_size', type=int, default=1, help='Batch size')
-    # parser.add_argument('--loss', type=str, default='1*VGG', help='loss function configuration')
-    # parser.add_argument('--patch_size_h', type=int, default=256, help='Patch size')
-    # parser.add_argument('--patch_size_w', type=int, default=256, help='Patch size')
 
     # parser.add_argument('--weight_decay', type=float, default=0, help='weight decay')
 
@@ -133,9 +118,6 @@ if __name__ == '__main__':
     parser.add_argument('--residual_detail_transfer', type=int, default=1)
     parser.add_argument('--beta_learnable', type=int, default=0)
     parser.add_argument('--splatting_type', type=str, default='softmax')
-    # parser.add_argument('--residual_detail_transfer_with_mask', type=int, default=0)
-    # parser.add_argument('--mask_with_proxy_mask', type=int, default=0)
-    # parser.add_argument('--max_proxy', type=int, default=0)
     parser.add_argument('--concat_proxy', type=int, default=0)
     parser.add_argument('--center_residual_detail_transfer', type=int, default=0)
     parser.add_argument('--pooling_with_center_bias', type=int, default=1)
@@ -206,7 +188,7 @@ if __name__ == '__main__':
         all_imgs = [first_frame]*(GAUSSIAN_FILTER_KSIZE//2) + all_imgs + [last_frame]*(GAUSSIAN_FILTER_KSIZE//2)
 
         large_mask_chain = []
-
+        flow_cache = dict() # my attempt at caching things
         # delta_x_y = torch.tensor(torch.zeros(original_length, 2), requires_grad=True)
         output_frames = []
         
@@ -221,18 +203,6 @@ if __name__ == '__main__':
             # if '00196.png' != img_name:
             #     continue
 
-            """smoothed_flow_list = []
-            for frame_shift in range(-(GAUSSIAN_FILTER_KSIZE//2), (GAUSSIAN_FILTER_KSIZE//2)+1):
-                ref_frame = all_imgs[idx + frame_shift]
-                ref_frame_name = os.path.split(ref_frame)[-1]
-                # ref_frame_flow_online = calc_flow(keyframe, ref_frame)  # [H, W, 2]
-                ref_frame_flow = np.load(os.path.join(pre_calculated_flow_path, category_name, avi_name, img_name[:-4]+'_'+ref_frame_name[:-4]+'.npy'))
-                
-                print(ref_frame_flow.shape)
-                ref_frame_flow = torch.FloatTensor(np.ascontiguousarray(ref_frame_flow.astype(np.float32))).cuda()
-                smoothed_flow_list.append(ref_frame_flow * gaussian_filter[frame_shift + GAUSSIAN_FILTER_KSIZE//2, 0])
-            smoothed_flow = torch.sum(torch.stack(smoothed_flow_list, dim=0), dim=0, keepdim=False)
-            print(torch.mean(smoothed_flow))"""
             if int(img_name[:-4]) == 0:
                 tenH_inv = torch.zeros((1, 2, 448 + 2 * 64, 832 + 2 * 64)).cuda()
                 tenFlow = torch.zeros((1, 2, 448 + 2 * 64, 832 + 2 * 64)).cuda()
@@ -257,8 +227,7 @@ if __name__ == '__main__':
             totalFlow = F.upsample(totalFlowIn832, size=(H, W), mode='bilinear')
             F_kprime_to_k = torch.stack((totalFlow[:, 0]*W_ratio, totalFlow[:, 1]*H_ratio), dim=1)
             
-
-
+            shifter = range(-(GAUSSIAN_FILTER_KSIZE // 2), (GAUSSIAN_FILTER_KSIZE // 2) + 1, int(args.temporal_step)) 
             sum_color = []
             sum_alpha = []
             input_frames = []
@@ -266,38 +235,42 @@ if __name__ == '__main__':
             forward_flows = []
             backward_flows = []
             flow_for, flow_back = None, None
-            for frame_shift in range(-(GAUSSIAN_FILTER_KSIZE // 2), (GAUSSIAN_FILTER_KSIZE // 2) + 1, int(args.temporal_step)):
+            for frame_shift in shifter:
                 # for frame_shift in [-5, 0, 5]:
                 ref_frame = all_imgs[idx + frame_shift]
-                ref_frame_name = os.path.split(ref_frame)[-1]
                 images = load_image_list([ref_frame, keyframe])
-
-                flow_for, forward_flow = flow_model(images[0, None], images[1, None], iters=32, test_mode=True, flow_init=flow_for)
-                # forward_flow = np.load(os.path.join(pre_calculated_flow_path, avi_name, ref_frame_name[:-4] + '_' + img_name[:-4] + '.npy'))
+                d_id = str(idx) + '+' + str(idx + frame_shift)
+                cache = flow_cache.pop(d_id, None)
+                if cache is None:
+                    print("Calculating flow...")
+                    flow_for, forward_flow = flow_model(images[0, None], images[1, None], iters=32, test_mode=True, flow_init=flow_for)
+                    flow_cache.setdefault(d_id, (flow_for, forward_flow))
+                else:
+                    print("Using cached flow!")
+                    flow_for, forward_flow = cache
                 # forward_flow = torch.FloatTensor(np.ascontiguousarray(forward_flow.astype(np.float32))).cuda()
                 
                 # somtimes flow encounters nan or very large values
                 """forward_flow[forward_flow != forward_flow] = 0
                 forward_flow[forward_flow > 448] = 0
                 forward_flow[forward_flow < (-448)] = 0"""
-                # cut off padding pixels done by RAFT (not needed?)
-                '''flow_H = list(forward_flow.size())[2]
-                flow_W = list(forward_flow.size())[3]
-                if H != flow_H:
-                    top = (flow_H - H) // 2
-                    forward_flow = forward_flow[:, :, top:top+H]
-                if W != flow_W:
-                    left = (flow_W - W) // 2
-                    forward_flow = forward_flow[:, :, :, left:left+W]'''
                 print(forward_flow.shape)
                 forward_flows.append(forward_flow)
                 # forward_flow += smoothed_flow
                 # input_flows.append(forward_flow)
                     
-                images = load_image_list([keyframe, ref_frame])
+                d_id = str(idx + frame_shift) + '+' + str(idx)
+                cache = flow_cache.pop(d_id, None)
+                if cache is None:
+                    print("Calculating flow...")
+                    flow_back, backward_flow = flow_model(images[0, None], images[1, None], iters=32, test_mode=True, flow_init=flow_back)
+                    flow_cache.setdefault(d_id, (flow_back, backward_flow))
+                else:
+                    print("Using cached flow!")
+                    flow_back, backward_flow = cache
+                # images = load_image_list([keyframe, ref_frame])
 
-                flow_back, backward_flow = flow_model(images[0, None], images[1, None], iters=32, test_mode=True, flow_init=flow_back)
-                # backward_flow = np.load(os.path.join(pre_calculated_flow_path, avi_name, img_name[:-4] + '_' + ref_frame_name[:-4] + '.npy'))
+                # flow_back, backward_flow = flow_model(images[1, None], images[0, None], iters=32, test_mode=True, flow_init=flow_back)
                 # backward_flow = torch.FloatTensor(np.ascontiguousarray(backward_flow.astype(np.float32))).cuda()
                 """backward_flow[backward_flow != backward_flow] = 0
                 backward_flow[backward_flow > 448] = 0
@@ -354,35 +327,6 @@ if __name__ == '__main__':
             
             # imwrite(frame_out, os.path.join(OUTPUT_PATH, avi_name, img_name), range=(0, 1))
             
-        """loss funstions"""
-        """learning_rate = 1e-1
-        optimizer = torch.optim.RMSprop([delta_x_y], lr=learning_rate)
-        
-        f = open('loss.csv', 'w+')
-        for step in range(2000):
-            data_term = 0.0
-            fidelity_term = 0.0
-            print(delta_x_y.detach().numpy())
-            for iiii in range(len(large_mask_chain)):
-                expanded_flow = torch.unsqueeze(torch.unsqueeze(torch.unsqueeze(delta_x_y[iiii], 0), 2), 3)
-                expanded_flow = expanded_flow.repeat(1, 1, list(large_mask_chain[iiii].size())[2], list(large_mask_chain[iiii].size())[3])
-                # expanded_flow = torch.tile(expanded_flow, (1, 1, list(large_mask_chain[iiii].size())[2], list(large_mask_chain[iiii].size())[3]))
-                cropped_mask = backwarp(tenInput=large_mask_chain[iiii], tenFlow=expanded_flow.cuda())[:, :, HHH:-HHH, WWW:-WWW]
-                summed_mask = torch.sum(1.0 - cropped_mask)
-                data_term += summed_mask
-                
-                fidelity_term += torch.sum(torch.abs(delta_x_y[iiii]))
-            smoothness_term = torch.sum(torch.abs(delta_x_y[1:] - delta_x_y[:-1]))
-            loss = data_term + 1000*fidelity_term + 1000*smoothness_term
-            f.write(str(data_term)+','+str(fidelity_term)+','+str(smoothness_term)+'\n')
-            print(data_term)
-            print(fidelity_term)
-            print(smoothness_term)
-            print(loss)
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-        f.close()"""
         
         WWW -= boundary_cropping_w
         HHH -= boundary_cropping_h
