@@ -263,7 +263,7 @@ if __name__ == '__main__':
                 cache = flow_cache.pop(d_id, None)
                 if cache is None:
                     print("Calculating flow...")
-                    flow_back, backward_flow = flow_model(images[0, None], images[1, None], iters=32, test_mode=True, flow_init=flow_back)
+                    flow_back, backward_flow = flow_model(images[1, None], images[0, None], iters=32, test_mode=True, flow_init=flow_back)
                     flow_cache.setdefault(d_id, (flow_back, backward_flow))
                 else:
                     print("Using cached flow!")
