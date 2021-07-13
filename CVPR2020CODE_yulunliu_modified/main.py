@@ -11,7 +11,7 @@ import glob, os
 from PIL import Image
 import gc
 import argparse
-
+from flow_vis import flow_to_color
 from torchvision import transforms
 from lib.nn import user_scattered_collate, async_copy_to
 from lib.utils import as_numpy
