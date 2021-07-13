@@ -46,9 +46,9 @@ Nkeep = 5
 batchsize = 8
 margin = 64
 
-def centralize(img1, img2):
-    b, c, h, w = img1.shape
-    rgb_mean = torch.cat([img1, img2], dim=2).view(b, c, -1).mean(2).view(b, c, 1, 1)
+def centralize(img1, img2, i1, i2):
+    b, c, _, _ = img1.shape
+    rgb_mean = torch.cat([video[i1, :, :, :]/255.0, video[i2, :, :, :]/255.0], dim=2).view(b, c, -1).mean(2).view(b, c, 1, 1)
     return img1 - rgb_mean, img2 - rgb_mean, rgb_mean
 
 # Network Builders
@@ -195,8 +195,8 @@ def grad_image(x):
 
 counter_person = 1
 def compute_flow_seg(video, H, start):
-    inp = torch.zeros(1, 3, 2, video.shape[1] + 2 * margin, video.shape[2] + 2 * margin).cuda()
-    inp1 = torch.zeros(1, 3, 2, video.shape[1], video.shape[2]).cuda()
+    # inp = torch.zeros(1, 3, 2, video.shape[1] + 2 * margin, video.shape[2] + 2 * margin).cuda()
+    # inp1 = torch.zeros(1, 3, 2, video.shape[1], video.shape[2]).cuda()
     optic = torch.zeros(video.shape[0] - 1 + nframe, 3, video.shape[1] + 2 * margin, video.shape[2] + 2 * margin)
     mask_object = torch.zeros(video.shape[0] - 1 + nframe, video.shape[1] + 2 * margin, video.shape[2] + 2 * margin)
 
@@ -216,19 +216,19 @@ def compute_flow_seg(video, H, start):
 
     for i in range(video.shape[0]):
         im1 = video[i, :, :, :]
-        im1 = np.concatenate((np.zeros((margin, 832, 3)), im1, np.zeros((margin, 832, 3))), axis=0)
-        im1 = np.concatenate((np.zeros((448 + 2 * margin, margin, 3)), im1, np.zeros((448 + 2 * margin, margin, 3))), axis=1)
+        im1 = np.concatenate((np.zeroes((margin, 832, 3)), im1, np.zeros((margin, 832, 3))), axis=0)
+        im1 = np.concatenate((np.zeroes((448 + 2 * margin, margin, 3)), im1, np.zeros((448 + 2 * margin, margin, 3))), axis=1)
         im1 = im1.astype(np.uint8)
-        warped_video[i, :, :, :] = torch.from_numpy(cv2.warpPerspective(im1, H[start + i, :, :], (im1.shape[1], im1.shape[0])))
-        mask[i, :, :] = torch.from_numpy(cv2.warpPerspective(mask_towarp, H[start + i, :, :], (im1.shape[1], im1.shape[0])))
+        warped_video[i, :, :, :] = torch.from_numpy(cv2.warpPerspective(im1, H[start + i, :, :], (im1.shape[1], im1.shape[0]))).float()
+        mask[i, :, :] = torch.from_numpy(cv2.warpPerspective(mask_towarp, H[start + i, :, :], (im1.shape[1], im1.shape[0]))).float()
         ss, ss_person = compute_mask(video[i, :, :, :])
         ss = np.concatenate((np.zeros((margin, 832)), ss.numpy(), np.zeros((margin, 832))), axis=0)
         ss_person = np.concatenate((np.zeros((margin, 832)), ss_person.numpy(), np.zeros((margin, 832))), axis=0)
         ss = np.concatenate((np.zeros((448 + 2 * margin, margin)), ss, np.zeros((448 + 2 * margin, margin))), axis=1)
         ss_person = np.concatenate((np.zeros((448 + 2 * margin, margin)), ss_person, np.zeros((448 + 2 * margin, margin))), axis=1)
-        optic[i, 2, :, :] = torch.from_numpy(cv2.warpPerspective(ss, H[start + i, :, :], (im1.shape[1], im1.shape[0])))
+        optic[i, 2, :, :] = torch.from_numpy(cv2.warpPerspective(ss, H[start + i, :, :], (im1.shape[1], im1.shape[0]))).float()
         # mask_object[i, :, :] = optic[i, 2, :, :]
-        mask_object[i, :, :] = torch.from_numpy(cv2.warpPerspective(ss_person, H[start + i, :, :], (im1.shape[1], im1.shape[0])))
+        mask_object[i, :, :] = torch.from_numpy(cv2.warpPerspective(ss_person, H[start + i, :, :], (im1.shape[1], im1.shape[0]))).float()
 
 
     warped_video = np.concatenate((warped_video.numpy(), np.tile(np.expand_dims(warped_video[-1, :, :, :].numpy(), 0), (nframe, 1, 1, 1))), 0)
@@ -237,14 +237,15 @@ def compute_flow_seg(video, H, start):
     div_size = 64
 
     for i in range(video.shape[0] - 1):
-        inp2 = torch.from_numpy(warped_video[i + 1, :, :, :]).float().permute((2, 0, 1)).unsqueeze(0)
-        inp1 = torch.from_numpy(warped_video[i, :, :, :]).float().permute((2, 0, 1)).unsqueeze(0)
-        inp1, inp2, _ = centralize(inp1, inp2)
+        inp1 = torch.from_numpy(warped_video[i + 1, :, :, :]).float().permute((2, 0, 1)).unsqueeze(0)/255.0
+        #print(video[i, :, :, :])
+        inp2 = torch.from_numpy(warped_video[i, :, :, :]).float().permute((2, 0, 1)).unsqueeze(0)/255.0
+        inp1, inp2, _ = centralize(inp1, inp2, i+1, i)
 
         height, width = inp1.shape[-2:]
-        orig_size = (int(height), int(width))
+        input_size = (int(height), int(width))
 
-        if height % div_size != 0 or width % div_size != 0:
+        '''if height % div_size != 0 or width % div_size != 0:
             input_size = (
                 int(div_size * np.ceil(height / div_size)), 
                 int(div_size * np.ceil(width / div_size))
@@ -252,19 +253,19 @@ def compute_flow_seg(video, H, start):
             inp1 = F.interpolate(inp1, size=input_size, mode='bilinear', align_corners=False)
             inp2 = F.interpolate(inp2, size=input_size, mode='bilinear', align_corners=False)
         else:
-            input_size = orig_size
+            input_size = orig_size'''
 
         input_t = torch.cat([inp1, inp2], 1).cuda()
 
-        out = flow_model(input_t).data * 2
-        # out = div_flow * F.interpolate(out, size=input_size, mode='bilinear', align_corners=False)
+        out = flow_model(input_t)
+        out = F.interpolate(out, size=input_size, mode='bilinear', align_corners=False) * 40.0
 
-        if input_size != orig_size:
+        '''if input_size != orig_size:
             scale_h = orig_size[0] / input_size[0]
             scale_w = orig_size[1] / input_size[1]
             out = F.interpolate(out, size=orig_size, mode='bilinear', align_corners=False)
             out[:, 0, :, :] *= scale_w
-            out[:, 1, :, :] *= scale_h
+            out[:, 1, :, :] *= scale_h'''
 
         flow = out[0].cpu().permute(1, 2, 0).numpy()
 
@@ -510,7 +511,7 @@ with torch.no_grad():
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
     flow_model = FastFlowNet.FastFlowNet().cuda().eval()
-    flow_model.load_state_dict(torch.load('./checkpoints/fastflownet_things3d.pth'))
+    flow_model.load_state_dict(torch.load('./checkpoints/fastflownet_ft_mix.pth'))
 
 
     xv, yv = np.meshgrid(np.linspace(-1, 1, 832 + 2 * margin), np.linspace(-1, 1, 448 + 2 * margin))
@@ -815,3 +816,4 @@ with torch.no_grad():
     writer.release()
     # cv2.imwrite(out_dir+'result.png',TOTAL_MAS*255)
     cv2.imwrite(out_file + '.png', TOTAL_MAS * 255)
+
