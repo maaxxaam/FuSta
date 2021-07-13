@@ -266,6 +266,11 @@ def compute_flow_seg(video, H, start):
             out[:, 0, :, :] *= scale_w
             out[:, 1, :, :] *= scale_h
 
+        flow = out[0].cpu().permute(1, 2, 0).numpy()
+
+        flow_color = flow_to_color(flow, convert_to_bgr=True)
+
+        cv2.imwrite(f'./data/flow{i}.png', flow_color)
         out[:, 0, :, :] = out[:, 0, :, :] / (832 + 2 * margin)
         out[:, 1, :, :] = out[:, 1, :, :] / (448 + 2 * margin)
         meanx = torch.mean(out[0, 0, :, :][torch.from_numpy(mask[i, :, :]) > 0])
