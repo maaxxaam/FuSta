@@ -11,7 +11,7 @@ import glob, os
 from PIL import Image
 import gc
 import argparse
-
+from flow_vis import flow_to_color
 from torchvision import transforms
 from lib.nn import user_scattered_collate, async_copy_to
 from lib.utils import as_numpy
@@ -257,7 +257,7 @@ def compute_flow_seg(video, H, start):
         input_t = torch.cat([inp1, inp2], 1).cuda()
 
         out = flow_model(input_t).data * 2
-        out = div_flow * F.interpolate(out, size=input_size, mode='bilinear', align_corners=False)
+        # out = div_flow * F.interpolate(out, size=input_size, mode='bilinear', align_corners=False)
 
         if input_size != orig_size:
             scale_h = orig_size[0] / input_size[0]
