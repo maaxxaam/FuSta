@@ -240,10 +240,10 @@ def compute_flow_seg(video, H, start):
         inp1 = torch.from_numpy(warped_video[i + 1, :, :, :]).float().permute((2, 0, 1)).unsqueeze(0)/255.0
         #print(video[i, :, :, :])
         inp2 = torch.from_numpy(warped_video[i, :, :, :]).float().permute((2, 0, 1)).unsqueeze(0)/255.0
-        inp1, inp2, _ = centralize(inp1, inp2, i+1, i)
+        # inp1, inp2, _ = centralize(inp1, inp2, i+1, i)
 
-        height, width = inp1.shape[-2:]
-        input_size = (int(height), int(width))
+        # height, width = inp1.shape[-2:]
+        # input_size = (int(height), int(width))
 
         '''if height % div_size != 0 or width % div_size != 0:
             input_size = (
@@ -255,10 +255,17 @@ def compute_flow_seg(video, H, start):
         else:
             input_size = orig_size'''
 
-        input_t = torch.cat([inp1, inp2], 1).cuda()
+        # input_t = torch.cat([inp1, inp2], 1).cuda()
 
-        out = flow_model(input_t)
-        out = F.interpolate(out, size=input_size, mode='bilinear', align_corners=False) * 40.0
+        intWidth = tenFirst.shape[2]
+        intHeight = tenFirst.shape[1]
+
+        tenPreprocessedFirst = inp1.cuda().view(1, 3, intHeight, intWidth)
+        tenPreprocessedSecond = inp2.cuda().view(1, 3, intHeight, intWidth)
+        out = F.interpolate(input=flow_model(tenPreprocessedFirst, tenPreprocessedSecond), size=(intHeight, intWidth), mode='bilinear', align_corners=False)
+
+        # out = flow_model(input_t)
+        # out = F.interpolate(out, size=input_size, mode='bilinear', align_corners=False) * 40.0
 
         '''if input_size != orig_size:
             scale_h = orig_size[0] / input_size[0]
@@ -510,8 +517,7 @@ def compute_H(path):
 with torch.no_grad():
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
-    flow_model = FastFlowNet.FastFlowNet().cuda().eval()
-    flow_model.load_state_dict(torch.load('./checkpoints/fastflownet_ft_mix.pth'))
+    flow_model = LiteFlowNet3.Network().cuda().eval()
 
 
     xv, yv = np.meshgrid(np.linspace(-1, 1, 832 + 2 * margin), np.linspace(-1, 1, 448 + 2 * margin))
