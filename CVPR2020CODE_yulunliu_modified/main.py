@@ -233,6 +233,11 @@ def compute_flow_seg(video, H, start):
         inp[:, :, 0, :, :] = torch.from_numpy(warped_video[i + 1, :, :, :]).float().cuda().permute((2, 0, 1)).unsqueeze(0)
         inp[:, :, 1, :, :] = torch.from_numpy(warped_video[i, :, :, :]).float().cuda().permute((2, 0, 1)).unsqueeze(0)
         out = flow_model(inp) * 2
+        flow = out[0].cpu().permute(1, 2, 0).numpy()
+
+        flow_color = flow_to_color(out, convert_to_bgr=True)
+
+        cv2.imwrite(f'./data/flow{i}.png', flow_color)
 
         out[:, 0, :, :] = out[:, 0, :, :] / (832 + 2 * margin)
         out[:, 1, :, :] = out[:, 1, :, :] / (448 + 2 * margin)
