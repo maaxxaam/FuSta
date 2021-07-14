@@ -14,7 +14,7 @@ import os
 import PIL
 import PIL.Image
 import sys
-from correlation_package.correlation import Correlation
+from .correlation_package.correlation import Correlation
 
 ##########################################################
 
@@ -337,7 +337,7 @@ class Network(torch.nn.Module):
         self.netMatching = torch.nn.ModuleList([ Matching(intLevel) for intLevel in [ 3, 4, 5, 6 ] ])
         self.netSubpixel = torch.nn.ModuleList([ Subpixel(intLevel) for intLevel in [ 3, 4, 5, 6 ] ])
         self.netRegularization = torch.nn.ModuleList([ Regularization(intLevel) for intLevel in [ 3, 4, 5, 6 ] ])
-        self.load_state_dict(torch.load('network-sintel.pytorch'))
+        self.load_state_dict(torch.load('./models/network-sintel.pytorch'))
     # end
 
     def forward(self, tenFirst, tenSecond):
@@ -425,4 +425,3 @@ if __name__ == '__main__':
     objOutput.close()
 '''
 # end
-

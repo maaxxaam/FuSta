@@ -24,7 +24,7 @@ import warnings
 
 warnings.filterwarnings("ignore")
 # import models_flownet
-from models import FastFlowNet
+from models import LiteFlowNet3
 import mpi_net35
 import skvideo.io
 from scipy.ndimage.filters import gaussian_filter
@@ -216,9 +216,9 @@ def compute_flow_seg(video, H, start):
 
     for i in range(video.shape[0]):
         im1 = video[i, :, :, :]
-        im1 = np.concatenate((np.zeroes((margin, 832, 3)), im1, np.zeros((margin, 832, 3))), axis=0)
-        im1 = np.concatenate((np.zeroes((448 + 2 * margin, margin, 3)), im1, np.zeros((448 + 2 * margin, margin, 3))), axis=1)
-        im1 = im1.astype(np.uint8)
+        im1 = np.concatenate((np.full((margin, 832, 3), 255), im1, np.full((margin, 832, 3), 255)), axis=0)
+        im1 = np.concatenate((np.full((448 + 2 * margin, margin, 3), 255), im1, np.full((448 + 2 * margin, margin, 3), 255)), axis=1)
+        im1 = im1.astype(np.int16)
         warped_video[i, :, :, :] = torch.from_numpy(cv2.warpPerspective(im1, H[start + i, :, :], (im1.shape[1], im1.shape[0]))).float()
         mask[i, :, :] = torch.from_numpy(cv2.warpPerspective(mask_towarp, H[start + i, :, :], (im1.shape[1], im1.shape[0]))).float()
         ss, ss_person = compute_mask(video[i, :, :, :])
@@ -237,9 +237,9 @@ def compute_flow_seg(video, H, start):
     div_size = 64
 
     for i in range(video.shape[0] - 1):
-        inp1 = torch.from_numpy(warped_video[i + 1, :, :, :]).float().permute((2, 0, 1)).unsqueeze(0)/255.0
-        #print(video[i, :, :, :])
-        inp2 = torch.from_numpy(warped_video[i, :, :, :]).float().permute((2, 0, 1)).unsqueeze(0)/255.0
+        inp1 = torch.from_numpy(warped_video[i + 1, :, :, :]).float().permute((2, 0, 1)).unsqueeze(0) / 255.0
+        # print(video[i, :, :, :].shape, inp1.shape)
+        inp2 = torch.from_numpy(warped_video[i, :, :, :]).float().permute((2, 0, 1)).unsqueeze(0) / 255.0
         # inp1, inp2, _ = centralize(inp1, inp2, i+1, i)
 
         # height, width = inp1.shape[-2:]
@@ -257,12 +257,13 @@ def compute_flow_seg(video, H, start):
 
         # input_t = torch.cat([inp1, inp2], 1).cuda()
 
-        intWidth = tenFirst.shape[2]
-        intHeight = tenFirst.shape[1]
+        intWidth = inp1.shape[3]
+        intHeight = inp1.shape[2]
 
-        tenPreprocessedFirst = inp1.cuda().view(1, 3, intHeight, intWidth)
-        tenPreprocessedSecond = inp2.cuda().view(1, 3, intHeight, intWidth)
-        out = F.interpolate(input=flow_model(tenPreprocessedFirst, tenPreprocessedSecond), size=(intHeight, intWidth), mode='bilinear', align_corners=False)
+        tenPreprocessedFirst = inp1.cuda()
+        tenPreprocessedSecond = inp2.cuda()
+        start = flow_model(tenPreprocessedFirst, tenPreprocessedSecond).data * 2
+        out = F.interpolate(input=start, size=(intHeight, intWidth), mode='bilinear', align_corners=False)
 
         # out = flow_model(input_t)
         # out = F.interpolate(out, size=input_size, mode='bilinear', align_corners=False) * 40.0
@@ -822,4 +823,5 @@ with torch.no_grad():
     writer.release()
     # cv2.imwrite(out_dir+'result.png',TOTAL_MAS*255)
     cv2.imwrite(out_file + '.png', TOTAL_MAS * 255)
+
 
