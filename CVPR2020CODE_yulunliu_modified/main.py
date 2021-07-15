@@ -239,9 +239,9 @@ def compute_flow_seg(video, H, start):
     div_size = 64
 
     for i in range(video.shape[0] - 1):
-        inp1 = torch.from_numpy(warped_video[i + 1, :, :, :]).float().permute((2, 0, 1)).unsqueeze(0) # 255.0
+        inp1 = torch.from_numpy(warped_video[i + 1, :, :, :]).float().permute((2, 0, 1)).unsqueeze(0) / 255.0 * 2 - 1
         # print(video[i, :, :, :].shape, inp1.shape)
-        inp2 = torch.from_numpy(warped_video[i, :, :, :]).float().permute((2, 0, 1)).unsqueeze(0) # 255.0
+        inp2 = torch.from_numpy(warped_video[i, :, :, :]).float().permute((2, 0, 1)).unsqueeze(0) / 255.0 * 2 - 1
         
 
         input_dict = {'im1': inp1, 'im2': inp2, 'if_loss': False}
