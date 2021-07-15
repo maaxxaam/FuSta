@@ -25,8 +25,8 @@ import warnings
 warnings.filterwarnings("ignore")
 # import models_flownet
 # from models import FastFlowNet
-# from models import LiteFlowNet3
-from models.upflow import UPFlowNet
+from models import LiteFlowNet3
+# from models.upflow import UPFlow_net
 import mpi_net35
 import skvideo.io
 from scipy.ndimage.filters import gaussian_filter
@@ -50,7 +50,7 @@ margin = 64
 
 def centralize(img1, img2, i1, i2):
     b, c, _, _ = img1.shape
-    rgb_mean = torch.cat([video[i1, :, :, :]/255.0, video[i2, :, :, :]/255.0], dim=2).view(b, c, -1).mean(2).view(b, c, 1, 1)
+    rgb_mean = torch.cat((img1, img2), dim=2).view(b, c, -1).mean(2).view(b, c, 1, 1)
     return img1 - rgb_mean, img2 - rgb_mean, rgb_mean
 
 # Network Builders
@@ -239,23 +239,23 @@ def compute_flow_seg(video, H, start):
     div_size = 64
 
     for i in range(video.shape[0] - 1):
-        inp1 = torch.from_numpy(warped_video[i + 1, :, :, :]).float().permute((2, 0, 1)).unsqueeze(0) / 255.0 * 2 - 1
+        inp1 = torch.from_numpy(warped_video[i + 1, :, :, :]).float().permute((2, 0, 1)).unsqueeze(0) / 255.0
         # print(video[i, :, :, :].shape, inp1.shape)
-        inp2 = torch.from_numpy(warped_video[i, :, :, :]).float().permute((2, 0, 1)).unsqueeze(0) / 255.0 * 2 - 1
-        
+        inp2 = torch.from_numpy(warped_video[i, :, :, :]).float().permute((2, 0, 1)).unsqueeze(0) / 255.0
+        inp1, inp2, _ = centralize(inp1, inp2)
 
-        input_dict = {'im1': inp1, 'im2': inp2, 'if_loss': False}
-        output_dict = flow_model(input_dict)
-        out = output_dict['flow_f_out']
+        #input_dict = {'im1': inp1, 'im2': inp2, 'if_loss': False}
+        #output_dict = flow_model(input_dict)
+        #out = output_dict['flow_f_out']
         # LiteFlowNet3 processing
-        '''intWidth = inp1.shape[3]
+        intWidth = inp1.shape[3]
         intHeight = inp1.shape[2]
 
         tenPreprocessedFirst = inp1.cuda()
         tenPreprocessedSecond = inp2.cuda()
-        start = flow_model(tenPreprocessedFirst, tenPreprocessedSecond).data * 2
+        start = flow_model(tenPreprocessedFirst, tenPreprocessedSecond).data 
         out = F.interpolate(input=start, size=(intHeight, intWidth), mode='bilinear', align_corners=False)
-        '''
+        
         # FastFlowNet processing
         # inp1, inp2, _ = centralize(inp1, inp2, i+1, i)
         # height, width = inp1.shape[-2:]
@@ -523,10 +523,10 @@ def compute_H(path):
 with torch.no_grad():
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
-    # flow_model = LiteFlowNet3.Network().cuda().eval()
-    flow_model = UPFlow_net.config()
-    flow_model.load_model('./checkpoints/upflow_kitti2015.pth', if_relax=True, if_print=True)
-    flow_model = flow_model.cuda().eval()
+    flow_model = LiteFlowNet3.Network().cuda().eval()
+    # flow_model = UPFlow_net.config()
+    # flow_model.load_model('./checkpoints/upflow_kitti2015.pth', if_relax=True, if_print=True)
+    # flow_model = flow_model.cuda().eval()
 
 
     xv, yv = np.meshgrid(np.linspace(-1, 1, 832 + 2 * margin), np.linspace(-1, 1, 448 + 2 * margin))
