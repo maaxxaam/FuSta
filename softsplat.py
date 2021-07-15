@@ -1,9 +1,8 @@
 #!/usr/bin/env python
 
-import torch
-
-import cupy
 import re
+import torch
+import cupy
 
 kernel_Softsplat_updateOutput = '''
 	extern "C" __global__ void kernel_Softsplat_updateOutput(
@@ -245,16 +244,16 @@ class _FunctionSoftsplat(torch.autograd.Function):
 		intInputDepth, intInputHeight, intInputWidth = input.shape[1], input.shape[2], input.shape[3]
 		intFlowDepth, intFlowHeight, intFlowWidth = flow.shape[1], flow.shape[2], flow.shape[3]
 
-		assert(intFlowDepth == 2)
-		assert(intInputHeight == intFlowHeight)
-		assert(intInputWidth == intFlowWidth)
+		assert intFlowDepth == 2
+		assert intInputHeight == intFlowHeight
+		assert intInputWidth == intFlowWidth
 
-		assert(input.is_contiguous() == True)
-		assert(flow.is_contiguous() == True)
+		assert input.is_contiguous() is True
+		assert flow.is_contiguous() is True
 
 		output = input.new_zeros([ intSamples, intInputDepth, intInputHeight, intInputWidth ])
 
-		if input.is_cuda == True:
+		if input.is_cuda is True:
 			n = output.nelement()
 			cupy_launch('kernel_Softsplat_updateOutput', cupy_kernel('kernel_Softsplat_updateOutput', {
 				'input': input,
@@ -266,7 +265,7 @@ class _FunctionSoftsplat(torch.autograd.Function):
 				args=[ n, input.data_ptr(), flow.data_ptr(), output.data_ptr() ]
 			)
 
-		elif input.is_cuda == False:
+		elif input.is_cuda is False:
 			raise NotImplementedError()
 
 		# end
@@ -282,16 +281,16 @@ class _FunctionSoftsplat(torch.autograd.Function):
 		intInputDepth, intInputHeight, intInputWidth = input.shape[1], input.shape[2], input.shape[3]
 		intFlowDepth, intFlowHeight, intFlowWidth = flow.shape[1], flow.shape[2], flow.shape[3]
 
-		assert(intFlowDepth == 2)
-		assert(intInputHeight == intFlowHeight)
-		assert(intInputWidth == intFlowWidth)
+		assert intFlowDepth == 2
+		assert intInputHeight == intFlowHeight
+		assert intInputWidth == intFlowWidth
 
-		assert(gradOutput.is_contiguous() == True)
+		assert gradOutput.is_contiguous() is True
 
-		gradInput = input.new_zeros([ intSamples, intInputDepth, intInputHeight, intInputWidth ]) if self.needs_input_grad[0] == True else None
-		gradFlow = input.new_zeros([ intSamples, intFlowDepth, intFlowHeight, intFlowWidth ]) if self.needs_input_grad[1] == True else None
+		gradInput = input.new_zeros([ intSamples, intInputDepth, intInputHeight, intInputWidth ]) if self.needs_input_grad[0] is True else None
+		gradFlow = input.new_zeros([ intSamples, intFlowDepth, intFlowHeight, intFlowWidth ]) if self.needs_input_grad[1] is True else None
 
-		if input.is_cuda == True:
+		if input.is_cuda is True:
 			if gradInput is not None:
 				n = gradInput.nelement()
 				cupy_launch('kernel_Softsplat_updateGradInput', cupy_kernel('kernel_Softsplat_updateGradInput', {
@@ -322,7 +321,7 @@ class _FunctionSoftsplat(torch.autograd.Function):
 				)
 			# end
 
-		elif input.is_cuda == False:
+		elif input.is_cuda is False:
 			raise NotImplementedError()
 
 		# end

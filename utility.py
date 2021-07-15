@@ -1,13 +1,13 @@
-import torch.optim as optim
-import torch.optim.lr_scheduler as lrs
 import torch
+from torch import optim
+import torch.optim.lr_scheduler as lrs
 from torch.autograd import Variable
-import torch.nn as nn
+from torch import nn
 
 
 class MeanShift(nn.Conv2d):
     def __init__(self, rgb_range, rgb_mean, rgb_std, sign=-1):
-        super(MeanShift, self).__init__(3, 3, kernel_size=1)
+        super().__init__(3, 3, kernel_size=1)
         std = torch.Tensor(rgb_std)
         self.weight.data = torch.eye(3).view(3, 3, 1, 1)
         self.weight.data.div_(std.view(3, 1, 1, 1))
@@ -70,7 +70,7 @@ def CharbonnierFunc(data, epsilon=0.001):
 
 class Module_CharbonnierLoss(nn.Module):
     def __init__(self, epsilon=0.001):
-        super(Module_CharbonnierLoss, self).__init__()
+        super().__init__()
         self.epsilon = epsilon
 
     def forward(self, output, gt):

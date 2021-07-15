@@ -1,10 +1,7 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torch.autograd import Variable
-import numpy as np
 
-def conv1_1(in_channels,out_channels,kernel=3,stride=1,dilate=1,padding=1):
+def conv1_1(in_channels,out_channels,kernel=3,stride=1,padding=1):
     return nn.Conv2d(
     in_channels,
     out_channels,
@@ -14,7 +11,7 @@ def conv1_1(in_channels,out_channels,kernel=3,stride=1,dilate=1,padding=1):
     bias=True,
     groups=1)
 
-def conv1_2(in_channels,out_channels,kernel=4,stride=2,dilate=1,padding=1):
+def conv1_2(in_channels,out_channels,kernel=4,stride=2,padding=1):
     return nn.Conv2d(
     in_channels,
     out_channels,
@@ -24,7 +21,7 @@ def conv1_2(in_channels,out_channels,kernel=4,stride=2,dilate=1,padding=1):
     bias=True,
     groups=1)
 
-def conv2_1(in_channels,out_channels,kernel=3,stride=1,dilate=1,padding=1):
+def conv2_1(in_channels,out_channels,kernel=3,stride=1,padding=1):
     return nn.Conv2d(
     in_channels,
     out_channels,
@@ -34,7 +31,7 @@ def conv2_1(in_channels,out_channels,kernel=3,stride=1,dilate=1,padding=1):
     bias=True,
     groups=1)
 
-def conv2_2(in_channels,out_channels,kernel=4,stride=2,dilate=1,padding=1):
+def conv2_2(in_channels,out_channels,kernel=4,stride=2,padding=1):
     return nn.Conv2d(
     in_channels,
     out_channels,
@@ -44,7 +41,7 @@ def conv2_2(in_channels,out_channels,kernel=4,stride=2,dilate=1,padding=1):
     bias=True,
     groups=1)
 
-def conv3_1(in_channels,out_channels,kernel=3,stride=1,dilate=1,padding=1):
+def conv3_1(in_channels,out_channels,kernel=3,stride=1,padding=1):
     return nn.Conv2d(
     in_channels,
     out_channels,
@@ -54,7 +51,7 @@ def conv3_1(in_channels,out_channels,kernel=3,stride=1,dilate=1,padding=1):
     bias=True,
     groups=1)
 
-def conv3_2(in_channels,out_channels,kernel=3,stride=1,dilate=1,padding=1):
+def conv3_2(in_channels,out_channels,kernel=3,stride=1,padding=1):
     return nn.Conv2d(
     in_channels,
     out_channels,
@@ -64,7 +61,7 @@ def conv3_2(in_channels,out_channels,kernel=3,stride=1,dilate=1,padding=1):
     bias=True,
     groups=1)
 
-def conv3_3(in_channels,out_channels,kernel=4,stride=2,dilate=1,padding=1):
+def conv3_3(in_channels,out_channels,kernel=4,stride=2,padding=1):
     return nn.Conv2d(
     in_channels,
     out_channels,
@@ -74,36 +71,36 @@ def conv3_3(in_channels,out_channels,kernel=4,stride=2,dilate=1,padding=1):
     bias=True,
     groups=1)
 
-def conv4_1(in_channels,out_channels,kernel=3,stride=1,dilate=2,padding=2):
+def conv4_1(in_channels,out_channels,kernel=3,stride=1,padding=2):
     return nn.Conv2d(
     in_channels,
     out_channels,
     kernel_size=kernel,
     stride=stride,
     padding=padding,
-    dilation=dilate,
+    dilation=2,
     bias=True,
     groups=1)
 
-def conv4_2(in_channels,out_channels,kernel=3,stride=1,dilate=2,padding=2):
+def conv4_2(in_channels,out_channels,kernel=3,stride=1,padding=2):
     return nn.Conv2d(
     in_channels,
     out_channels,
     kernel_size=kernel,
     stride=stride,
     padding=padding,
-    dilation=dilate,
+    dilation=2,
     bias=True,
     groups=1)
 
-def conv4_3(in_channels,out_channels,kernel=3,stride=1,dilate=2,padding=2):
+def conv4_3(in_channels,out_channels,kernel=3,stride=1,padding=2):
     return nn.Conv2d(
     in_channels,
     out_channels,
     kernel_size=kernel,
     stride=stride,
     padding=padding,
-    dilation=dilate,
+    dilation=2,
     bias=True,
     groups=1)
 
@@ -115,7 +112,7 @@ def conv5_1(in_channels,out_channels,kernel=4,stride=2,padding=1):
         stride=stride,
         padding=padding)
 
-def conv5_2(in_channels,out_channels,kernel=3,stride=1,dilate=1,padding=1):
+def conv5_2(in_channels,out_channels,kernel=3,stride=1,padding=1):
     return nn.Conv2d(
     in_channels,
     out_channels,
@@ -125,7 +122,7 @@ def conv5_2(in_channels,out_channels,kernel=3,stride=1,dilate=1,padding=1):
     bias=True,
     groups=1)
 
-def conv5_3(in_channels,out_channels,kernel=3,stride=1,dilate=1,padding=1):
+def conv5_3(in_channels,out_channels,kernel=3,stride=1,padding=1):
     return nn.Conv2d(
     in_channels,
     out_channels,
@@ -143,7 +140,7 @@ def conv6_1(in_channels,out_channels,kernel=4,stride=2,padding=1):
         stride=stride,
         padding=padding)
 
-def conv6_2(in_channels,out_channels,kernel=3,stride=1,dilate=1,padding=1):
+def conv6_2(in_channels,out_channels,kernel=3,stride=1,padding=1):
     return nn.Conv2d(
     in_channels,
     out_channels,
@@ -161,7 +158,7 @@ def conv7_1(in_channels,out_channels,kernel=4,stride=2,padding=1):
         stride=stride,
         padding=padding)
 
-def conv7_2(in_channels,out_channels,kernel=3,stride=1,dilate=1,padding=1):
+def conv7_2(in_channels,out_channels,kernel=3,stride=1,padding=1):
     return nn.Conv2d(
     in_channels,
     out_channels,
@@ -171,7 +168,7 @@ def conv7_2(in_channels,out_channels,kernel=3,stride=1,dilate=1,padding=1):
     bias=True,
     groups=1)
 
-def conv7_3(in_channels,out_channels,kernel=1,stride=1,dilate=1,padding=0):
+def conv7_3(in_channels,out_channels,kernel=1,stride=1,padding=0):
     return nn.Conv2d(
     in_channels,
     out_channels,
@@ -185,7 +182,7 @@ def conv7_3(in_channels,out_channels,kernel=1,stride=1,dilate=1,padding=0):
 class mpinet(nn.Module):
     def __init__(self, in_channels=60, out_channels=38,
                  start_filts=64):
-        super(mpinet, self).__init__()
+        super().__init__()
         self.out_channels=out_channels
         self.conv11=conv1_1(in_channels,start_filts*2)
         self.conv12=conv1_2(start_filts*2,start_filts*4)
@@ -208,12 +205,11 @@ class mpinet(nn.Module):
         self.conv73=conv7_3(start_filts*2,out_channels)
         
         for m in self.modules():
-            if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
+            if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
                 nn.init.kaiming_normal(m.weight.data)
                 if m.bias is not None:
                     m.bias.data.zero_()
     def forward(self, x1):
-        
         out1_1=self.conv11(x1)
         out1_2=self.conv12(out1_1)
         out2_1=self.conv21(out1_2)

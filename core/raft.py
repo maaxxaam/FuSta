@@ -1,12 +1,11 @@
-import numpy as np
 import torch
-import torch.nn as nn
+from torch import nn
 import torch.nn.functional as F
 
-from update import BasicUpdateBlock, SmallUpdateBlock
-from extractor import BasicEncoder, SmallEncoder
-from corr import CorrBlock, AlternateCorrBlock
-from utils.utils import bilinear_sampler, coords_grid, upflow8
+from update import BasicUpdateBlock
+from extractor import BasicEncoder
+from corr import CorrBlock
+from utils.utils import coords_grid, upflow8
 
 try:
     autocast = torch.cuda.amp.autocast
@@ -14,25 +13,21 @@ except:
     # dummy autocast for PyTorch < 1.6
     class autocast:
         def __init__(self, enabled):
+            # dummy method
             pass
         def __enter__(self):
+            # dummy method
             pass
         def __exit__(self, *args):
+            # dummy method
             pass
 
 
 class RAFT(nn.Module):
     def __init__(self, args):
-        super(RAFT, self).__init__()
+        super().__init__()
         self.args = args
 
-        # if args.small:
-        #     self.hidden_dim = hdim = 96
-        #     self.context_dim = cdim = 64
-        #     args.corr_levels = 4
-        #     args.corr_radius = 3
-        
-        # else:
         self.hidden_dim = hdim = 128
         self.context_dim = cdim = 128
         args.corr_levels = 4
@@ -41,16 +36,6 @@ class RAFT(nn.Module):
         if 'dropout' not in args._get_kwargs():
             args.dropout = 0
 
-        # if 'alternate_corr' not in args._get_kwargs():
-        #     args.alternate_corr = False
-
-        # feature network, context network, and update block
-        # if args.small:
-        #     self.fnet = SmallEncoder(output_dim=128, norm_fn='instance', dropout=args.dropout)
-        #     self.cnet = SmallEncoder(output_dim=hdim+cdim, norm_fn='none', dropout=args.dropout)
-        #     self.update_block = SmallUpdateBlock(self.args, hidden_dim=hdim)
-
-        # else:
         self.fnet = BasicEncoder(output_dim=256, norm_fn='instance', dropout=args.dropout)
         self.cnet = BasicEncoder(output_dim=hdim+cdim, norm_fn='batch', dropout=args.dropout)
         self.update_block = BasicUpdateBlock(self.args, hidden_dim=hdim)
@@ -62,7 +47,7 @@ class RAFT(nn.Module):
                 m.eval()
 
     def initialize_flow(self, img):
-        """ Flow is represented as difference between two coordinate grids flow = coords1 - coords0"""
+        """ Flow is represented as a diff between two coordinate grids flow = coords1 - coords0"""
         N, C, H, W = img.shape
         coords0 = coords_grid(N, H//8, W//8).to(img.device)
         coords1 = coords_grid(N, H//8, W//8).to(img.device)
@@ -84,7 +69,7 @@ class RAFT(nn.Module):
         return up_flow.reshape(N, 2, 8*H, 8*W)
 
 
-    def forward(self, image1, image2, iters=12, flow_init=None, upsample=True, test_mode=False):
+    def forward(self, image1, image2, iters=12, flow_init=None):
         """ Estimate optical flow between pair of frames """
 
         image1 = 2 * (image1 / 255.0) - 1.0
@@ -98,13 +83,11 @@ class RAFT(nn.Module):
 
         # run the feature network
         with autocast(enabled=False):
-            fmap1, fmap2 = self.fnet([image1, image2])        
-        
+            fmap1, fmap2 = self.fnet([image1, image2])
+
         fmap1 = fmap1.float()
         fmap2 = fmap2.float()
-        # if self.args.alternate_corr:
-        #     corr_fn = CorrBlockAlternate(fmap1, fmap2, radius=self.args.corr_radius)
-        # else:
+
         corr_fn = CorrBlock(fmap1, fmap2, radius=self.args.corr_radius)
 
         # run the context network
@@ -120,7 +103,7 @@ class RAFT(nn.Module):
             coords1 = coords1 + flow_init
 
         flow_predictions = []
-        for itr in range(iters):
+        for _ in range(iters):
             coords1 = coords1.detach()
             corr = corr_fn(coords1) # index correlation volume
 
@@ -136,10 +119,7 @@ class RAFT(nn.Module):
                 flow_up = upflow8(coords1 - coords0)
             else:
                 flow_up = self.upsample_flow(coords1 - coords0, up_mask)
-            
+
             flow_predictions.append(flow_up)
 
-        if test_mode:
-            return coords1 - coords0, flow_up
-            
-        return flow_predictions
+        return coords1 - coords0, flow_up
