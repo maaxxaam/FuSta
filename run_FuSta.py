@@ -21,10 +21,12 @@ import models_arbitrary
 
 DEVICE = 'cuda'
 
+
 def load_image(imfile):
     img = np.array(Image.open(imfile)).astype(np.uint8)
     img = torch.from_numpy(img).permute(2, 0, 1).float()
     return img
+
 
 def load_image_list(image_files):
     images = []
@@ -37,6 +39,7 @@ def load_image_list(image_files):
     padder = InputPadder(images.shape)
     return padder.pad(images)[0]
 
+
 def calc_flow(img1, img2):
     with torch.no_grad():
 
@@ -45,11 +48,10 @@ def calc_flow(img1, img2):
         _, flow_up = flow_model(images[0, None], images[1, None], iters=20)
     return flow_up.detach()
 
+
 backwarp_tenGrid = {}
 backwarp_tenPartial = {}
 
-
-backwarp_tenGrid = {}
 
 def backwarp(ten_input, ten_flow):
     if str(ten_flow.shape) not in backwarp_tenGrid:
@@ -59,9 +61,8 @@ def backwarp(ten_input, ten_flow):
         backwarp_tenGrid[str(ten_flow.shape)] = torch.cat([ten_hor, ten_ver], 1).cuda()
     # end
     ten_flow = torch.cat([ten_flow[:, 0:1, :, :] / ((ten_input.shape[3] - 1.0) / 2.0), ten_flow[:, 1:2, :, :] / ((ten_input.shape[2] - 1.0) / 2.0)], 1)
-    return torch.nn.functional.grid_sample(input=ten_input, grid=(backwarp_tenGrid[str(ten_flow.shape)] + ten_flow).permute(0, 2, 3, 1), mode='bilinear', padding_mode='zeros', align_corners=False)
+    return F.grid_sample(input=ten_input, grid=(backwarp_tenGrid[str(ten_flow.shape)] + ten_flow).permute(0, 2, 3, 1), mode='bilinear', padding_mode='zeros', align_corners=False)
 # end
-
 
 
 def read_homography(h_path):
@@ -75,6 +76,7 @@ def read_homography(h_path):
     yv_prime = (h_inv[1, 0] * xv + h_inv[1, 1] * yv + h_inv[1, 2]) / (h_inv[2, 0] * xv + h_inv[2, 1] * yv + h_inv[2, 2])
     flow = np.stack((xv_prime - xv, yv_prime - yv), -1)
     return flow
+
 
 def read_flo(flo_path):
     print(flo_path)
@@ -90,7 +92,7 @@ def read_flo(flo_path):
 
 if __name__ == '__main__':
 
-    parser = argparse.ArgumentParser(description='AdaCoF-Pytorch')
+    parser = argparse.ArgumentParser(description='FuSta')
     # parameters
     # Model Selection
     parser.add_argument('--model', type=str, default='adacofnet')
@@ -159,11 +161,8 @@ if __name__ == '__main__':
     assert (GAUSSIAN_FILTER_KSIZE-1)//2 % args.temporal_step == 0
     
     with torch.no_grad():
-    
-    
-    
-        if not os.path.exists(os.path.join(OUTPUT_PATH)):
-            os.makedirs(os.path.join(OUTPUT_PATH))
+
+        os.makedirs(os.path.join(OUTPUT_PATH), exist_ok=True)
         # put all pngs in a sequence
         all_imgs = sorted(glob.glob(os.path.join(INPUT_FRAMES_PATH, '*.png')))
         
@@ -188,24 +187,7 @@ if __name__ == '__main__':
             img_name = os.path.split(keyframe)[-1]
             print(img_name)
             tenSecond = torch.FloatTensor(np.ascontiguousarray(cv2.imread(filename=keyframe, flags=-1)[..., ::-1].transpose(2, 0, 1)[None, :, :, :].astype(np.float32) * (1.0 / 255.0))).cuda()
-            
-            
 
-            # if '00196.png' != img_name:
-            #     continue
-
-            """smoothed_flow_list = []
-            for frame_shift in range(-(GAUSSIAN_FILTER_KSIZE//2), (GAUSSIAN_FILTER_KSIZE//2)+1):
-                ref_frame = all_imgs[idx + frame_shift]
-                ref_frame_name = os.path.split(ref_frame)[-1]
-                # ref_frame_flow_online = calc_flow(keyframe, ref_frame)  # [H, W, 2]
-                ref_frame_flow = np.load(os.path.join(pre_calculated_flow_path, category_name, avi_name, img_name[:-4]+'_'+ref_frame_name[:-4]+'.npy'))
-                
-                print(ref_frame_flow.shape)
-                ref_frame_flow = torch.FloatTensor(np.ascontiguousarray(ref_frame_flow.astype(np.float32))).cuda()
-                smoothed_flow_list.append(ref_frame_flow * gaussian_filter[frame_shift + GAUSSIAN_FILTER_KSIZE//2, 0])
-            smoothed_flow = torch.sum(torch.stack(smoothed_flow_list, dim=0), dim=0, keepdim=False)
-            print(torch.mean(smoothed_flow))"""
             if int(img_name[:-4]) == 0:
                 tenH_inv = torch.zeros((1, 2, 448 + 2 * 64, 832 + 2 * 64)).cuda()
                 tenFlow = torch.zeros((1, 2, 448 + 2 * 64, 832 + 2 * 64)).cuda()
@@ -219,18 +201,15 @@ if __name__ == '__main__':
                 else:
                     print('no flow data')
                     continue
-                    
-            
+
             # calculate backward flow using inv_H and backward_flow
             tenBackFlow = backwarp(ten_input=tenH_inv, ten_flow=tenFlow)
             totalFlowIn832 = (tenBackFlow+tenFlow)[:, :, 64:-64, 64:-64]
             """second backward warping in full resolution"""
-            W_ratio = W/(832)
-            H_ratio = H/(448)
+            W_ratio = W / 832.0
+            H_ratio = H / 448.0
             totalFlow = F.upsample(totalFlowIn832, size=(H, W), mode='bilinear')
             F_kprime_to_k = torch.stack((totalFlow[:, 0]*W_ratio, totalFlow[:, 1]*H_ratio), dim=1)
-            
-
 
             sum_color = []
             sum_alpha = []
@@ -251,10 +230,9 @@ if __name__ == '__main__':
                 # cut off padding pixels done by RAFT
                 flow_H = list(forward_flow.size())[2]
                 flow_W = list(forward_flow.size())[3]
-                if H != flow_H:
+                if H != flow_H or W != flow_W:
                     top = (flow_H - H) // 2
                     forward_flow = forward_flow[:, :, top:top+H]
-                if W != flow_W:
                     left = (flow_W - W) // 2
                     forward_flow = forward_flow[:, :, :, left:left+W]
                 print(forward_flow.shape)
@@ -266,15 +244,10 @@ if __name__ == '__main__':
                 backward_flow[backward_flow < (-448)] = 0"""
                 backward_flows.append(backward_flow)
                 input_frames.append(torch.FloatTensor(np.ascontiguousarray(cv2.imread(filename=ref_frame, flags=-1)[..., ::-1].transpose(2, 0, 1)[None, :, :, :].astype(np.float32) * (1.0 / 255.0))).cuda())
-                
-            if H % 4 == 0:
-                BOUND_CROP_HT = 4
-            else:
-                BOUND_CROP_HT = 3
-            if W % 4 == 0:
-                BOUND_CROP_WD = 4
-            else:
-                BOUND_CROP_WD = 3
+
+            BOUND_CROP_HT = 3 + int(H % 4 == 0)
+            BOUND_CROP_WD = 3 + int(W % 4 == 0)
+
             input_frames = [x[:, :, BOUND_CROP_HT:-BOUND_CROP_HT, BOUND_CROP_WD:-BOUND_CROP_WD] for x in input_frames]
             F_kprime_to_k = F_kprime_to_k[:, :, BOUND_CROP_HT:-BOUND_CROP_HT, BOUND_CROP_WD:-BOUND_CROP_WD]
             forward_flows = [x[:, :, BOUND_CROP_HT:-BOUND_CROP_HT, BOUND_CROP_WD:-BOUND_CROP_WD] for x in forward_flows]
@@ -283,12 +256,11 @@ if __name__ == '__main__':
             frame_out = model(input_frames, F_kprime_to_k, forward_flows, backward_flows)
             """output_frames.append(frame_out.detach().cpu())"""
             # if OOM          
-            if not os.path.exists('tmp/'):
-                os.makedirs('tmp/')                
+            os.makedirs('tmp/', exist_ok=True)
             np.save('tmp/'+str(len(large_mask_chain)).zfill(5), frame_out.detach().cpu().numpy())
             output_frames.append('tmp/'+str(len(large_mask_chain)).zfill(5)+'.npy')
 
-            """blending methods"""
+            # blending methods
             WWW = 256
             HHH = 256
             tenOnes = torch.ones_like(input_frames[0])[:, 0:1, :, :]
@@ -297,26 +269,21 @@ if __name__ == '__main__':
             tenWarpedFeat = []
             tenWarpedMask = []
             for iii, feat in enumerate(input_frames):
-                """padding for forward warping"""
+                # padding for forward warping
                 ref_frame_flow = torch.nn.ReplicationPad2d((WWW, WWW, HHH, HHH))(forward_flows[iii])
-                """first forward warping"""
+                # first forward warping
                 tenMaskFirst = softsplat.FunctionSoftsplat(tenInput=tenOnes, tenFlow=ref_frame_flow, tenMetric=None, strType='average')
-                """second backward warping"""
+                # second backward warping
                 tenMaskSecond = backwarp(ten_input=tenMaskFirst, ten_flow=F_kprime_to_k_pad)
-                """back to original resolution"""
+                # back to original resolution
                 tenMask = tenMaskSecond
                 tenWarpedMask.append(tenMask)
             weight_tensor = torch.stack(tenWarpedMask, 0)
             output_mask = torch.sum(weight_tensor, dim=0)
             output_mask = torch.clamp(output_mask, max=1.0)
-            # imwrite(output_mask, str(idx-GAUSSIAN_FILTER_KSIZE//2).zfill(5)+'_mask.png', range=(0, 1))
-            
+
             large_mask_chain.append(output_mask.detach().cpu())
 
-            
-            # imwrite(frame_out, os.path.join(OUTPUT_PATH, avi_name, img_name), range=(0, 1))
-
-        
         WWW -= BOUND_CROP_WD
         HHH -= BOUND_CROP_HT
             
@@ -325,38 +292,30 @@ if __name__ == '__main__':
         maximum_movement = 3
         for level in range(5, -1, -1):
             # data term / 2^3 level
+            from itertools import tee
             data_term = np.zeros((original_length, (2*maximum_movement+1) * (2*maximum_movement+1)))
             print('data term')
             for index, obj in enumerate(large_mask_chain):
                 print(index)
-                for uu in range(-maximum_movement, maximum_movement+1):
+                for uu , vv in tee(range(-maximum_movement, maximum_movement+1), 2):
                     print(uu)
-                    for vv in range(-maximum_movement, maximum_movement+1):
-                        # converage term
-                        motion_vector_u = int(accumulated_motion_vectors[index, 0]+uu*(2**level))
-                        motion_vector_v = int(accumulated_motion_vectors[index, 1]+vv*(2**level))
-                        
-                        cropped_mask = obj[:, :, HHH+motion_vector_u:-HHH+motion_vector_u, WWW+motion_vector_v:-WWW+motion_vector_v]
-                        
-                        summed_mask = (torch.sum(1.0 - cropped_mask)).cpu().numpy()
-                        
-                        # fidelity term
-                        # data_term[iiii, (uu+maximum_movement)*(2*maximum_movement+1)+vv+maximum_movement] = 10.0*(np.abs(uu) + np.abs(vv))*(2**level) + summed_mask
-                        data_term[index, (uu+maximum_movement)*(2*maximum_movement+1)+vv+maximum_movement] = summed_mask
-                        
-            
+                    # converage term
+                    motion_vector_u = int(accumulated_motion_vectors[index, 0]+uu*(2**level))
+                    motion_vector_v = int(accumulated_motion_vectors[index, 1]+vv*(2**level))
+
+                    cropped_mask = obj[:, :, HHH+motion_vector_u:-HHH+motion_vector_u, WWW+motion_vector_v:-WWW+motion_vector_v]
+
+                    summed_mask = (torch.sum(1.0 - cropped_mask)).cpu().numpy()
+
+                    # fidelity term
+                    data_term[index, (uu+maximum_movement)*(2*maximum_movement+1)+vv+maximum_movement] = summed_mask
+
             print('smoothness term')
             smoothness_term = np.zeros(((2*maximum_movement+1) * (2*maximum_movement+1), (2*maximum_movement+1) * (2*maximum_movement+1)))
-            for uu in range(-maximum_movement, maximum_movement+1):
-                print(uu)
-                for vv in range(-maximum_movement, maximum_movement+1):
-                    print(vv)
-                    for uuuu in range(-maximum_movement, maximum_movement+1):
-                        for vvvv in range(-maximum_movement, maximum_movement+1):
-                            smoothness_term[(uu+maximum_movement)*(2*maximum_movement+1)+vv+maximum_movement, (uuuu+maximum_movement)*(2*maximum_movement+1)+vvvv+maximum_movement] = (((uu-uuuu)*(2**level))**2 + ((vv-vvvv)*(2**level))**2)
-            
-            
-            
+            for uu, vv, uuuu, vvvv in tee(list(range(-maximum_movement, maximum_movement + 1)), 4):
+                print(uu, vv)
+                smoothness_term[(uu+maximum_movement)*(2*maximum_movement+1)+vv+maximum_movement, (uuuu+maximum_movement)*(2*maximum_movement+1)+vvvv+maximum_movement] = (((uu-uuuu)*(2**level))**2 + ((vv-vvvv)*(2**level))**2)
+
             alpha = 100.0
             labels = aexpansion_grid(data_term,smoothness_term*alpha)  #  [H, W]
             for iiii in range(labels.shape[0]):
@@ -374,7 +333,6 @@ if __name__ == '__main__':
             print(motion_vector_u)
             print(motion_vector_v)
             print(cropped_mask.shape)
-            # imwrite(output_frames[iiii][:, :, HHH+motion_vector_u:-HHH+motion_vector_u, WWW+motion_vector_v:-WWW+motion_vector_v], os.path.join(OUTPUT_PATH, avi_name, str(iiii+1).zfill(5)+'.png'), range=(0, 1))
             # if OOM
             imwrite(torch.from_numpy(np.load(output_frames[index]))[:, :, HHH+motion_vector_u:-HHH+motion_vector_u, WWW+motion_vector_v:-WWW+motion_vector_v], os.path.join(OUTPUT_PATH, str(index+1).zfill(5)+'.png'), range=(0, 1))
             

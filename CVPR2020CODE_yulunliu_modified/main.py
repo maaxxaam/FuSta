@@ -54,6 +54,18 @@ def transform1(x):
     return x.unsqueeze(0).permute(0, 2, 3, 1)
 
 
+def unsqueeze2(x):
+    return x.unsqueeze(0).unsqueeze(0)
+
+
+def sample(x, y):
+    return to_cpu(grid_sample(float_cuda(torch.from_numpy(x)), y))
+
+
+def to_cpu(x):
+    return x.data.cpu()
+
+
 def float_cuda(x):
     return x.unsqueeze(0).float().cuda()
 
@@ -98,7 +110,7 @@ def compute_mask(img):
     batch_data['img_data'] = [x.contiguous() for x in img_resized_list]
 
     seg_size = (batch_data['img_ori'].shape[0],
-               batch_data['img_ori'].shape[1])
+                batch_data['img_ori'].shape[1])
     img_resized_list = batch_data['img_data']
 
     with torch.no_grad():
@@ -136,36 +148,36 @@ def movingstd2(A, k):
 
     kernel = torch.ones(2 * k + 1, 2 * k + 1).cuda()
 
-    N = conv2d(wuns.unsqueeze(0).unsqueeze(0), kernel.unsqueeze(0).unsqueeze(0), padding=5)
-    s = torch.sqrt((conv2d(A2.unsqueeze(0).unsqueeze(0), kernel.unsqueeze(0).unsqueeze(0), padding=5) - ((conv2d(A.unsqueeze(0).unsqueeze(0), kernel.unsqueeze(0).unsqueeze(0), padding=5)) ** 2) / N) / (N - 1))
+    N = conv2d(unsqueeze2(wuns), unsqueeze2(kernel), padding=5)
+    s = torch.sqrt((conv2d(unsqueeze2(A2), unsqueeze2(kernel), padding=5) -
+                    ((conv2d(unsqueeze2(A), unsqueeze2(kernel), padding=5)) ** 2) / N) / (N - 1))
     s = s * Astd
 
     return s
 
 
-def moving_average(b, n=3):
-    res = gaussian_filter(b, sigma=n)
-    return res
+def moving_avg(b, n=3):
+    return gaussian_filter(b, sigma=n)
 
 
 def grad_image(x):
-    A = torch.Tensor([[1, 0, -1], [2, 0, -2], [1, 0, -1]]).cuda()
-    A = A.view((1, 1, 3, 3))
-    G_x = conv2d(x.unsqueeze(0).unsqueeze(0), A, padding=1)
+    a = torch.Tensor([[1, 0, -1], [2, 0, -2], [1, 0, -1]]).cuda()
+    a = a.view((1, 1, 3, 3))
+    g_x = conv2d(x.unsqueeze(0).unsqueeze(0), a, padding=1)
 
-    B = torch.Tensor([[1, 2, 1], [0, 0, 0], [-1, -2, -1]]).cuda()
-    B = B.view((1, 1, 3, 3))
-    G_y = conv2d(x.unsqueeze(0).unsqueeze(0), B, padding=1)
+    b = torch.Tensor([[1, 2, 1], [0, 0, 0], [-1, -2, -1]]).cuda()
+    b = b.view((1, 1, 3, 3))
+    g_y = conv2d(x.unsqueeze(0).unsqueeze(0), b, padding=1)
 
-    G = torch.sqrt(torch.pow(G_x[0, 0, :, :], 2) + torch.pow(G_y[0, 0, :, :], 2))
-    return G
+    g = torch.sqrt(torch.pow(g_x[0, 0, :, :], 2) + torch.pow(g_y[0, 0, :, :], 2))
+    return g
 
 
 PERSON_COUNTER = 1
 
 
-def compute_flow_seg(video, H, start):
-    frm_count, wd, ht, _ = video.shape
+def compute_flow_seg(frame_list, h, start):
+    frm_count, wd, ht, _ = frame_list.shape
     new_wd, new_ht = wd + 2 * MARGIN, ht + 2 * MARGIN
     inp = torch.zeros(1, 3, 2, new_wd, new_ht).cuda()
     optic = torch.zeros(frm_count - 1 + N_FRAME, 3, new_wd, new_ht)
@@ -180,27 +192,27 @@ def compute_flow_seg(video, H, start):
 
     des_wd, des_ht = 832 + 2 * MARGIN, 448 + 2 * MARGIN
 
-    for i in range(video.shape[0]):
-        im1 = video[i, :, :, :]
+    for i in range(frame_list.shape[0]):
+        im1 = frame_list[i, :, :, :]
         im1 = np.concatenate((np.zeros((MARGIN, 832, 3)), im1, np.zeros((MARGIN, 832, 3))), axis=0)
         im1 = np.concatenate((np.zeros((des_ht, MARGIN, 3)), im1, np.zeros((des_ht, MARGIN, 3))), axis=1)
         im1 = im1.astype(np.uint8)
-        warped_video[i, :, :, :] = torch.from_numpy(cv2.warpPerspective(im1, H[start + i, :, :], (im1.shape[1], im1.shape[0])))
-        mask[i, :, :] = torch.from_numpy(cv2.warpPerspective(mask_towarp, H[start + i, :, :], (im1.shape[1], im1.shape[0])))
-        ss, ss_person = compute_mask(video[i, :, :, :])
+        warped_video[i, :, :, :] = torch.from_numpy(cv2.warpPerspective(im1, h[start + i, :, :], (des_ht, des_wd)))
+        mask[i, :, :] = torch.from_numpy(cv2.warpPerspective(mask_towarp, h[start + i, :, :], (des_ht, des_wd)))
+        ss, ss_person = compute_mask(frame_list[i, :, :, :])
         ss = np.concatenate((np.zeros((MARGIN, 832)), ss.numpy(), np.zeros((MARGIN, 832))), axis=0)
         ss_person = np.concatenate((np.zeros((MARGIN, 832)), ss_person.numpy(), np.zeros((MARGIN, 832))), axis=0)
         ss = np.concatenate((np.zeros((des_ht, MARGIN)), ss, np.zeros((des_ht, MARGIN))), axis=1)
         ss_person = np.concatenate((np.zeros((des_ht, MARGIN)), ss_person, np.zeros((des_ht, MARGIN))), axis=1)
-        optic[i, 2, :, :] = torch.from_numpy(cv2.warpPerspective(ss, H[start + i, :, :], (im1.shape[1], im1.shape[0])))
-        mask_object[i, :, :] = torch.from_numpy(cv2.warpPerspective(ss_person, H[start + i, :, :], (im1.shape[1], im1.shape[0])))
+        optic[i, 2, :, :] = torch.from_numpy(cv2.warpPerspective(ss, h[start + i, :, :], (des_ht, des_wd)))
+        mask_object[i, :, :] = torch.from_numpy(cv2.warpPerspective(ss_person, h[start + i, :, :], (des_ht, des_wd)))
 
     warped_video = np.concatenate((warped_video.numpy(), np.tile(np.expand_dims(warped_video[-1, :, :, :].numpy(), 0), (N_FRAME, 1, 1, 1))), 0)
     mask = np.concatenate((mask.numpy(), np.tile(np.expand_dims(mask[-1, :, :].numpy(), 0), (N_FRAME, 1, 1))), 0)
 
-    for i in range(video.shape[0] - 1):
-        inp[:, :, 0, :, :] = torch.from_numpy(warped_video[i + 1, :, :, :]).float().cuda().permute((2, 0, 1)).unsqueeze(0)
-        inp[:, :, 1, :, :] = torch.from_numpy(warped_video[i, :, :, :]).float().cuda().permute((2, 0, 1)).unsqueeze(0)
+    for i in range(frame_list.shape[0] - 1):
+        inp[:, :, 0, :, :] = float_cuda(torch.from_numpy(warped_video[i + 1, :, :, :])).permute((2, 0, 1)).unsqueeze(0)
+        inp[:, :, 1, :, :] = float_cuda(torch.from_numpy(warped_video[i, :, :, :])).permute((2, 0, 1)).unsqueeze(0)
         out = flow_model(inp) * 2
         flow = out[0].cpu().permute(1, 2, 0).numpy()
 
@@ -268,9 +280,6 @@ def detect_points(im1, im2):
     orb = cv2.ORB_create(2500)
     keypoints1, descriptors1 = orb.detectAndCompute(im1_gray, None)
     keypoints2, descriptors2 = orb.detectAndCompute(im2_gray, None)
-    #    sift = cv2.xfeatures2d.SURF_create(2500)
-    #    keypoints1, descriptors1 = sift.detectAndCompute(im1Gray,None)
-    #    keypoints2, descriptors2 = sift.detectAndCompute(im2Gray,None)
     if len(keypoints1) == 0 or len(keypoints2) == 0:
         return None, None
 
@@ -279,8 +288,7 @@ def detect_points(im1, im2):
 
     matches.sort(key=lambda x: x.distance, reverse=False)
 
-    num_good_matches = int(len(matches) * 0.15)
-    matches = matches[:num_good_matches]
+    matches = matches[:int(len(matches) * 0.15)]
     points1 = np.zeros((len(matches), 2), dtype=np.float32)
     points2 = np.zeros((len(matches), 2), dtype=np.float32)
     for i, match in enumerate(matches):
@@ -303,12 +311,12 @@ def rigid_transform_2d(im1, im2):
     centroid_a = np.mean(A, axis=0)
     centroid_b = np.mean(B, axis=0)
 
-    AA = A - np.tile(centroid_a, (N, 1))
-    BB = B - np.tile(centroid_b, (N, 1))
+    A = A - np.tile(centroid_a, (N, 1))  # AA
+    B = B - np.tile(centroid_b, (N, 1))  # BB
 
-    H = np.matmul(np.transpose(AA), BB)
+    H = np.matmul(np.transpose(A), B)
 
-    U, _, Vt = np.linalg.svd(H) # second variable S unused
+    U, _, Vt = np.linalg.svd(H)  # second variable S unused
 
     R = np.matmul(Vt.T, U.T)
 
@@ -319,7 +327,7 @@ def rigid_transform_2d(im1, im2):
 
     t = centroid_b.T - centroid_a.T
 
-    pt = np.matmul(AA, R) / BB
+    pt = np.matmul(A, R) / B
     pt = pt[np.abs(pt - 1) < 0.1]
     ss = np.mean(pt)
     if ss < 0:
@@ -334,13 +342,10 @@ def compute_h(path):
     all_images = sorted(glob.glob(os.path.join(path, img_mask)))
     numframe = len(all_images)
     H = np.zeros((numframe + N_FRAME - 1, 3, 3))
-    H[:, 0, 0] = 1.0
-    H[:, 1, 1] = 1.0
-    H[:, 2, 2] = 1.0
     h_inv = np.zeros((numframe + N_FRAME - 1, 3, 3))
-    h_inv[:, 0, 0] = 1.0
-    h_inv[:, 1, 1] = 1.0
-    h_inv[:, 2, 2] = 1.0
+    for i in range(3):
+        H[:, i, i] = 1.0
+        h_inv[:, i, i] = 1.0
     R = np.zeros((numframe + N_FRAME - 1, 1))
     tx = np.zeros((numframe + N_FRAME - 1, 1))
     ty = np.zeros((numframe + N_FRAME - 1, 1))
@@ -362,10 +367,8 @@ def compute_h(path):
             rr, tt, ss = rigid_transform_2d(im1_ori, im2_ori)
 
             if np.isnan(np.min(rr)) or np.isnan(np.min(tt)) or np.isnan(np.min(ss)):
-                tx[i + 1] = tx[i]
-                ty[i + 1] = ty[i]
-                R[i + 1] = R[i]
-                s[i + 1] = s[i]
+                for arr in [tx, ty, R, s]:
+                    arr[i + 1] = arr[i]
             else:
                 tx[i + 1] = tx[i] + tt[0]
                 ty[i + 1] = ty[i] + tt[1]
@@ -381,10 +384,10 @@ def compute_h(path):
     ty = np.concatenate((ty[:i], ty[i - 1] * np.ones((N_FRAME, 1))), 0)
     s = np.concatenate((s[:i], s[i - 1] * np.ones((N_FRAME, 1))), 0)
 
-    r_smooth = moving_average(R, 3)
-    tx_smooth = moving_average(tx, 20)
-    ty_smooth = moving_average(ty, 5)
-    s_smooth = moving_average(s, 3)
+    r_smooth = moving_avg(R, 3)
+    tx_smooth = moving_avg(tx, 20)
+    ty_smooth = moving_avg(ty, 5)
+    s_smooth = moving_avg(s, 3)
 
     tx_move = (tx_smooth - tx)
     ty_move = (ty_smooth - ty)
@@ -409,18 +412,19 @@ def compute_h(path):
 
 with torch.no_grad():
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-
+    # load FlowNet2
     flow_model = models_flownet.FlowNet2().cuda()
     checkpoint = torch.load('FlowNet2_checkpoint.pth.tar')  #
     flow_model.load_state_dict(checkpoint['state_dict'])
     flow_model.eval()
 
-    xv, yv = np.meshgrid(np.linspace(-1, 1, 832 + 2 * MARGIN), np.linspace(-1, 1, 448 + 2 * MARGIN))
+    des_wd, des_ht = 832 + 2 * MARGIN, 448 + 2 * MARGIN
+    xv, yv = np.meshgrid(np.linspace(-1, 1, des_wd), np.linspace(-1, 1, des_ht))
     xv = np.expand_dims(xv, axis=2)
     yv = np.expand_dims(yv, axis=2)
     grid = np.expand_dims(np.concatenate((xv, yv), axis=2), axis=0)
     grid_large = np.repeat(grid, 1, axis=0)
-    grid_large = Variable(torch.from_numpy(grid_large).float().cuda(), requires_grad=False)
+    grid_large = Variable(float_cuda(torch.from_numpy(grid_large)), requires_grad=False)
 
     xv, yv = np.meshgrid(np.linspace(1, 832, 832), np.linspace(1, 448, 448))
     xv = np.expand_dims(xv, axis=2)
@@ -430,15 +434,15 @@ with torch.no_grad():
 
     U = np.load('PC_U.npy')
     V = np.load('PC_V.npy')
-    U1 = np.zeros((N_KEEP, (832 + 2 * MARGIN) * (448 + 2 * MARGIN)))
-    V1 = np.zeros((N_KEEP, (832 + 2 * MARGIN) * (448 + 2 * MARGIN)))
+    U1 = np.zeros((N_KEEP, des_wd * des_ht))
+    V1 = np.zeros((N_KEEP, des_wd * des_ht))
     for i in range(0, N_KEEP):
         temp = U[i, :].reshape((256, 512))
-        temp = cv2.resize(temp, ((832 + 2 * MARGIN), (448 + 2 * MARGIN)))
-        U1[i, :] = temp.reshape(1, (832 + 2 * MARGIN) * (448 + 2 * MARGIN))
+        temp = cv2.resize(temp, (des_wd, des_ht))
+        U1[i, :] = temp.reshape(1, des_wd * des_ht)
         temp = V[i, :].reshape((256, 512))
-        temp = cv2.resize(temp, ((832 + 2 * MARGIN), (448 + 2 * MARGIN)))
-        V1[i, :] = temp.reshape(1, (832 + 2 * MARGIN) * (448 + 2 * MARGIN))
+        temp = cv2.resize(temp, (des_wd, des_ht))
+        V1[i, :] = temp.reshape(1, des_wd * des_ht)
     U = torch.from_numpy(U1).float()
     V = torch.from_numpy(V1).float()
     base = torch.cat((U, V), 0).t()
@@ -463,10 +467,10 @@ with torch.no_grad():
     height = tmp_img.shape[0]
     width = tmp_img.shape[1]
     nseg = np.ceil(float(numframe) / float(SEG))
-    TOTAL_MAS = np.ones((448 + 2 * MARGIN, 832 + 2 * MARGIN))
+    TOTAL_MAS = np.ones((des_ht, des_wd))
 
-    writer = cv2.VideoWriter(out_file + '.avi', cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), 29, (832 + 2 * MARGIN, 448 + 2 * MARGIN))  # vid_reader.get(cv2.CAP_PROP_FPS)
-    writer_mask = cv2.VideoWriter(out_file + '_mask.avi', cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), 29, (832 + 2 * MARGIN, 448 + 2 * MARGIN))  # vid_reader.get(cv2.CAP_PROP_FPS)
+    writer = cv2.VideoWriter(out_file + '.avi', cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), 29, (des_wd, des_ht))  # vid_reader.get(cv2.CAP_PROP_FPS)
+    writer_mask = cv2.VideoWriter(out_file + '_mask.avi', cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), 29, (des_wd, des_ht))  # vid_reader.get(cv2.CAP_PROP_FPS)
     COUNTER = 1
     COUNTER2 = 1
     if not os.path.exists(out_warping_field_path):
@@ -479,10 +483,9 @@ with torch.no_grad():
         cu = 0
         video = np.zeros((SEG, height, width, 3))
         for iiiii in all_frames:
-            frame = cv2.imread(iiiii)
             SKIP = SKIP + 1
             if SKIP >= ite2 * (SEG - 1) + 1:
-                video[cu, :, :, :] = frame
+                video[cu, :, :, :] = cv2.imread(iiiii)
                 cu = cu + 1
             if cu == SEG:
                 break
@@ -502,7 +505,7 @@ with torch.no_grad():
         del res
 
         optic, video, mask, mask_object = compute_flow_seg(video, H, ite2 * (SEG - 1))
-        MASK = np.ones((video.shape[0], 1, 448 + 2 * MARGIN, 832 + 2 * MARGIN))
+        MASK = np.ones((video.shape[0], 1, des_ht, des_wd))
 
         if ite2 > 0:
             optic[0, 0:2, :, :] = optic[0, 0:2, :, :] - lastwarp.cpu()
@@ -517,113 +520,122 @@ with torch.no_grad():
             print(result.shape)
             warping_fields = torch.zeros(video.shape[0], 2, video.shape[1], video.shape[2])
             H_invs = np.zeros((video.shape[0], 3, 3))
-            for i in range(0, video.shape[0] - N_FRAME):
-                if i == 0:
-                    optic_temp = optic[i:i + N_FRAME, :, :, :].cuda()
-                    optic_temp[:, 2, :, :] = torch.from_numpy(mask[i:i + N_FRAME, :, :]).cuda()
-                    optic_temp = optic_temp.view(optic_temp.shape[0] * optic_temp.shape[1], optic_temp.shape[2], optic_temp.shape[3]).unsqueeze(0)
-                    oup = model(optic_temp)
+            # i == 0
+            optic_temp = optic[:N_FRAME, :, :, :].cuda()
+            tmp_shape = optic_temp.shape
+            optic_temp[:, 2, :, :] = torch.from_numpy(mask[:N_FRAME, :, :]).cuda()
+            optic_temp = optic_temp.view(tmp_shape[0] * tmp_shape[1], tmp_shape[2], tmp_shape[3]).unsqueeze(0)
+            oup = model(optic_temp)
 
-                    oup = oup[0, 0:2, :, :].permute((1, 2, 0)).view((448 + 2 * MARGIN) * (832 + 2 * MARGIN), 2)
-                    mask1 = optic[i + 1, 2, :, :].view(-1)
-                    Q = base[mask1 > 0]
-                    c = torch.mm(torch.mm((torch.mm(Q.t(), Q) + RHO * torch.eye(2 * N_KEEP)).inverse(), Q.t()), oup[mask1 > 0].cpu())
-                    oup2 = torch.mm(base, c).cuda()
-                    oup = oup2
-                    oup = oup.view(448 + 2 * MARGIN, 832 + 2 * MARGIN, 2).permute((2, 0, 1)).unsqueeze(0)  # .cuda()
+            oup = oup[0, 0:2, :, :].permute((1, 2, 0)).view(des_ht * des_wd, 2)
+            mask1 = optic[1, 2, :, :].view(-1)
+            Q = base[mask1 > 0]
+            c = torch.mm(torch.mm((torch.mm(Q.t(), Q) + RHO * torch.eye(2 * N_KEEP)).inverse(), Q.t()),
+                         oup[mask1 > 0].cpu())
+            oup2 = torch.mm(base, c).cuda()
+            oup = oup2
+            oup = oup.view(des_ht, des_wd, 2).permute((2, 0, 1)).unsqueeze(0)  # .cuda()
 
-                    warp_acc[i, :, :, :] = warp_acc[i, :, :, :] + oup[:, 0:2, :, :].data
-                    warp[i, :, :, :] = oup[:, 0:2, :, :].data.cpu()
-                    warping_fields[i, :, :, :] = warp_acc[i, :, :, :]
+            warp_acc[0, :, :, :] = warp_acc[0, :, :, :] + oup[:, 0:2, :, :].data
+            warp[0, :, :, :] = to_cpu(oup[:, 0:2, :, :])
+            warping_fields[0, :, :, :] = warp_acc[0, :, :, :]
 
-                    if ITE1 == ROU - 1:
-                        warp_acc[i, 0, :, :] = torch.from_numpy(gaussian_filter(warp_acc[i, 0, :, :].data.cpu().numpy(), sigma=3))
-                        warp_acc[i, 1, :, :] = torch.from_numpy(gaussian_filter(warp_acc[i, 1, :, :].data.cpu().numpy(), sigma=3))
-                        warping_fields[i, :, :, :] = warp_acc[i, :, :, :]
+            if ITE1 == ROU - 1:
+                warp_acc[0, 0, :, :] = torch.from_numpy(moving_avg(to_cpu(warp_acc[0, 0, :, :]).numpy()))
+                warp_acc[0, 1, :, :] = torch.from_numpy(moving_avg(to_cpu(warp_acc[0, 1, :, :]).numpy()))
+                warping_fields[0, :, :, :] = warp_acc[0, :, :, :]
 
-                        newimages = grid_sample(float_cuda(torch.from_numpy(np.transpose(video[i + 1, :, :, :], (2, 0, 1)))), grid_large + transform1(warp_acc[i, :, :, :])).data.cpu()
-                        newmasks = grid_sample(float_cuda(torch.from_numpy(np.transpose(np.expand_dims(mask[i + 1, :, :], -1), (2, 0, 1)))), grid_large + transform1(warp_acc[i, :, :, :])).data.cpu()
-                        MAS = grid_sample(float_cuda(torch.from_numpy(mask[i + 1, :, :]).unsqueeze(0)), grid_large + transform1(warp_acc[i, :, :, :])).data.cpu()
-                        if ite2 > 0:
-                            result[i, :, :, :] = grid_sample(float_cuda(torch.from_numpy(np.transpose(video[i, :, :, :], (2, 0, 1)))), grid_large + transform1(lastwarp.cuda())).data.cpu().permute(0, 2, 3, 1)
-                            warping_fields[i, :, :, :] = warp_acc[i, :, :, :]
-                        else:
-                            result[i, :, :, :] = torch.from_numpy(video[i, :, :, :])
-                            warping_fields[i, :, :, :] = warp_acc[i, :, :, :]
-                        result[i + 1, :, :, :] = newimages.permute(0, 2, 3, 1)
-                        MASK[i + 1, :, :, :] = MAS
-
-                elif i == video.shape[0] - N_FRAME - 1:
-                    optic_temp = optic[i:i + N_FRAME, :, :, :].cuda()
-                    optic_temp[:, 2, :, :] = torch.from_numpy(mask[i:i + N_FRAME, :, :]).cuda()
-                    optic_temp[0, 0:2, :, :] = optic_temp[0, 0:2, :, :] - oup[0, 0:2, :, :]
-                    optic_temp = optic_temp.view(optic_temp.shape[0] * optic_temp.shape[1], optic_temp.shape[2], optic_temp.shape[3]).unsqueeze(0)
-                    oup = model(optic_temp)
-
-                    if ITE1 == ROU - 1:
-                        print(video.shape)
-                        newimages = np.transpose(video[i:i + N_FRAME + 1, :, :, :], (0, 3, 1, 2))
-                        newmasks = np.transpose((np.expand_dims(mask, -1))[i:i + N_FRAME + 1, :, :, :], (0, 3, 1, 2))
-                    for ite in range(0, N_FRAME - 1):
-
-                        oup1 = oup[0, 2 * ite:2 * ite + 2, :, :].permute((1, 2, 0)).view((448 + 2 * MARGIN) * (832 + 2 * MARGIN), 2)
-                        mask1 = optic[i + ite + 1, 2, :, :].view(-1)  # test_mask[i+1,0,:,:].view(-1)#
-                        Q = base[mask1 > 0]
-                        c = torch.mm(torch.mm((torch.mm(Q.t(), Q) + RHO * torch.eye(2 * N_KEEP)).inverse(), Q.t()), oup1[mask1 > 0].cpu())
-                        oup2 = torch.mm(base, c).cuda()
-                        oup1 = oup2
-                        oup1 = oup1.view(448 + 2 * MARGIN, 832 + 2 * MARGIN, 2).permute((2, 0, 1)).unsqueeze(0)
-                        warp[i + ite, :, :, :] = oup1[:, 0:2, :, :].data
-                        warp_acc[i + ite, :, :, :] = warp_acc[i + ite, :, :, :] + oup1[:, 0:2, :, :].data
-                        warping_fields[i + ite, :, :, :] = warp_acc[i + ite, :, :, :]
-
-                        if ITE1 == ROU - 1:
-                            warp_acc[i + ite, 0, :, :] = torch.from_numpy(gaussian_filter(warp_acc[i + ite, 0, :, :].data.cpu().numpy(), sigma=3))
-                            warp_acc[i + ite, 1, :, :] = torch.from_numpy(gaussian_filter(warp_acc[i + ite, 1, :, :].data.cpu().numpy(), sigma=3))
-                            MAS = grid_sample(float_cuda(torch.from_numpy(mask[i + ite + 1, :, :]).unsqueeze(0)), grid_large + transform1(warp_acc[i + ite, :, :, :])).data.cpu()
-                            lastwarp = warp_acc[i - 1, :, :, :]
-                            newimages[ite + 1, :, :, :] = grid_sample(float_cuda(torch.from_numpy(newimages[ite + 1, :, :, :])), grid_large + transform1(warp_acc[i + ite, :, :, :])).data.cpu()
-                            MASK[i + 1, :, :, :] = MAS
-                            newmasks[ite + 1, :, :, :] = grid_sample(float_cuda(torch.from_numpy(newmasks[ite + 1, :, :, :])), grid_large + transform1(warp_acc[i + ite, :, :, :])).data.cpu()
-
-                            warping_fields[i, :, :, :] = warp_acc[i, :, :, :]
-                    if ITE1 == ROU - 1:
-                        result[i + 1:i + N_FRAME + 1, :, :, :] = torch.from_numpy(np.transpose(newimages[1:, :, :, :], (0, 2, 3, 1)))
-                        MASK[i + 1:i + N_FRAME + 1, :, :, :] = newmasks[1:, :, :, :]
-                        warping_fields[i + 1:i + N_FRAME + 1, :, :, :] = warp_acc[1, :, :, :]
+                sample_val = grid_large + transform1(warp_acc[0, :, :, :])
+                newimages = sample(np.transpose(video[0 + 1, :, :, :], (2, 0, 1)), sample_val)
+                newmasks = sample(np.transpose(np.expand_dims(mask[0 + 1, :, :], -1), (2, 0, 1)), sample_val)
+                MAS = to_cpu(grid_sample(float_cuda(torch.from_numpy(mask[0 + 1, :, :]).unsqueeze(0)), sample_val))
+                if ite2 > 0:
+                    result[0, :, :, :] = to_cpu(grid_sample(
+                        float_cuda(torch.from_numpy(np.transpose(video[0, :, :, :], (2, 0, 1)))),
+                        grid_large + transform1(lastwarp.cuda()))).permute(0, 2, 3, 1)
                 else:
-                    optic_temp = optic[i:i + N_FRAME, :, :, :].cuda()
-                    optic_temp[:, 2, :, :] = torch.from_numpy(mask[i:i + N_FRAME, :, :]).cuda()
-                    optic_temp[0, 0:2, :, :] = optic_temp[0, 0:2, :, :] - oup[0, 0:2, :, :]
-                    optic_temp = optic_temp.view(optic_temp.shape[0] * optic_temp.shape[1], optic_temp.shape[2], optic_temp.shape[3]).unsqueeze(0)
-                    oup = model(optic_temp)
+                    result[0, :, :, :] = torch.from_numpy(video[0, :, :, :])
+                warping_fields[0, :, :, :] = warp_acc[0, :, :, :]
+                result[0 + 1, :, :, :] = newimages.permute(0, 2, 3, 1)
+                MASK[0 + 1, :, :, :] = MAS
 
-                    oup = oup[0, 0:2, :, :].permute((1, 2, 0)).view((448 + 2 * MARGIN) * (832 + 2 * MARGIN), 2)
-                    mask1 = optic[i + 1, 2, :, :].view(-1)  # test_mask[i+1,0,:,:].view(-1)#
-                    Q = base[mask1 > 0]
-                    c = torch.mm(torch.mm((torch.mm(Q.t(), Q) + RHO * torch.eye(2 * N_KEEP)).inverse(), Q.t()), oup[mask1 > 0].cpu())
-                    oup2 = torch.mm(base, c).cuda()
-                    oup = oup2
-                    oup = oup.view(448 + 2 * MARGIN, 832 + 2 * MARGIN, 2).permute((2, 0, 1)).unsqueeze(0)
+            for i in range(1, video.shape[0] - N_FRAME - 1):
+                optic_temp = optic[i:i + N_FRAME, :, :, :].cuda()
+                optic_temp[:, 2, :, :] = torch.from_numpy(mask[i:i + N_FRAME, :, :]).cuda()
+                optic_temp[0, 0:2, :, :] = optic_temp[0, 0:2, :, :] - oup[0, 0:2, :, :]
+                optic_temp = optic_temp.view(tmp_shape[0] * tmp_shape[1], tmp_shape[2], tmp_shape[3]).unsqueeze(0)
+                oup = model(optic_temp)
 
-                    warp[i, :, :, :] = oup[:, 0:2, :, :].data.cpu()
-                    warp_acc[i, :, :, :] = warp_acc[i, :, :, :] + oup[:, 0:2, :, :].data
+                oup = oup[0, 0:2, :, :].permute((1, 2, 0)).view(des_ht * des_wd, 2)
+                mask1 = optic[i + 1, 2, :, :].view(-1)  # test_mask[i+1,0,:,:].view(-1)#
+                Q = base[mask1 > 0]
+                c = torch.mm(torch.mm((torch.mm(Q.t(), Q) + RHO * torch.eye(2 * N_KEEP)).inverse(), Q.t()), oup[mask1 > 0].cpu())
+                oup2 = torch.mm(base, c).cuda()
+                oup = oup2
+                oup = oup.view(des_ht, des_wd, 2).permute((2, 0, 1)).unsqueeze(0)
+
+                warp[i, :, :, :] = to_cpu(oup[:, 0:2, :, :])
+                warp_acc[i, :, :, :] = warp_acc[i, :, :, :] + oup[:, 0:2, :, :].data
+
+                warping_fields[i, :, :, :] = warp_acc[i, :, :, :]
+
+                if ITE1 == ROU - 1:
+                    warp_acc[i, 0, :, :] = torch.from_numpy(moving_avg(to_cpu(warp_acc[i, 0, :, :]).numpy()))
+                    warp_acc[i, 1, :, :] = torch.from_numpy(moving_avg(to_cpu(warp_acc[i, 1, :, :]).numpy()))
+                    sample_val = grid_large + transform1(warp_acc[i, :, :, :])
+                    MAS = to_cpu(grid_sample(float_cuda(torch.from_numpy(mask[i + 1, :, :]).unsqueeze(0)), sample_val))
+                    newimages = sample(np.transpose(video[i + 1, :, :, :], (2, 0, 1)), sample_val)
+                    newmasks = sample(np.transpose(np.expand_dims(mask[i + 1, :, :], -1), (2, 0, 1)), sample_val)
 
                     warping_fields[i, :, :, :] = warp_acc[i, :, :, :]
+                    H_invs[i, :, :] = H_inv[i + ite2 * (SEG - 1) - 1, :, :]
+                    result[i + 1, :, :, :] = newimages.permute(0, 2, 3, 1)
+                    MASK[i + 1, :, :, :] = MAS
+            i = video.shape[0] - N_FRAME - 1
+            optic_temp = optic[i:i + N_FRAME, :, :, :].cuda()
+            optic_temp[:, 2, :, :] = torch.from_numpy(mask[i:i + N_FRAME, :, :]).cuda()
+            optic_temp[0, 0:2, :, :] = optic_temp[0, 0:2, :, :] - oup[0, 0:2, :, :]
+            optic_temp = optic_temp.view(tmp_shape[0] * tmp_shape[1], tmp_shape[2], tmp_shape[3]).unsqueeze(0)
+            oup = model(optic_temp)
 
-                    if ITE1 == ROU - 1:
-                        warp_acc[i, 0, :, :] = torch.from_numpy(gaussian_filter(warp_acc[i, 0, :, :].data.cpu().numpy(), sigma=3))
-                        warp_acc[i, 1, :, :] = torch.from_numpy(gaussian_filter(warp_acc[i, 1, :, :].data.cpu().numpy(), sigma=3))
+            if ITE1 == ROU - 1:
+                print(video.shape)
+                newimages = np.transpose(video[i:i + N_FRAME + 1, :, :, :], (0, 3, 1, 2))
+                newmasks = np.transpose((np.expand_dims(mask, -1))[i:i + N_FRAME + 1, :, :, :], (0, 3, 1, 2))
+            for ite in range(0, N_FRAME - 1):
 
-                        MAS = grid_sample(float_cuda(torch.from_numpy(mask[i + 1, :, :]).unsqueeze(0)), grid_large + transform1(warp_acc[i, :, :, :])).data.cpu()
-                        newimages = grid_sample(float_cuda(torch.from_numpy(np.transpose(video[i + 1, :, :, :], (2, 0, 1)))), grid_large + transform1(warp_acc[i, :, :, :])).data.cpu()
-                        newmasks = grid_sample(float_cuda(torch.from_numpy(np.transpose(np.expand_dims(mask[i + 1, :, :], -1), (2, 0, 1)))), grid_large + transform1(warp_acc[i, :, :, :])).data.cpu()
+                oup1 = oup[0, 2 * ite:2 * ite + 2, :, :].permute((1, 2, 0)).view(des_ht * des_wd, 2)
+                mask1 = optic[i + ite + 1, 2, :, :].view(-1)  # test_mask[i+1,0,:,:].view(-1)#
+                Q = base[mask1 > 0]
+                c = torch.mm(torch.mm((torch.mm(Q.t(), Q) + RHO * torch.eye(2 * N_KEEP)).inverse(), Q.t()),
+                             oup1[mask1 > 0].cpu())
+                oup2 = torch.mm(base, c).cuda()
+                oup1 = oup2
+                oup1 = oup1.view(des_ht, des_wd, 2).permute((2, 0, 1)).unsqueeze(0)
+                warp[i + ite, :, :, :] = oup1[:, 0:2, :, :].data
+                warp_acc[i + ite, :, :, :] = warp_acc[i + ite, :, :, :] + oup1[:, 0:2, :, :].data
+                warping_fields[i + ite, :, :, :] = warp_acc[i + ite, :, :, :]
 
-                        warping_fields[i, :, :, :] = warp_acc[i, :, :, :]
-                        H_invs[i, :, :] = H_inv[i + ite2 * (SEG - 1) - 1, :, :]
-                        result[i + 1, :, :, :] = newimages.permute(0, 2, 3, 1)
-                        MASK[i + 1, :, :, :] = MAS
+                if ITE1 == ROU - 1:
+                    warp_acc[i + ite, 0, :, :] = torch.from_numpy(
+                        moving_avg(to_cpu(warp_acc[i + ite, 0, :, :]).numpy()))
+                    warp_acc[i + ite, 1, :, :] = torch.from_numpy(
+                        moving_avg(to_cpu(warp_acc[i + ite, 1, :, :]).numpy()))
 
+                    sample_val = grid_large + transform1(warp_acc[i + ite, :, :, :])
+                    MAS = to_cpu(grid_sample(float_cuda(torch.from_numpy(mask[i + ite + 1, :, :]).unsqueeze(0)),
+                                             sample_val))
+                    lastwarp = warp_acc[i - 1, :, :, :]
+                    newimages[ite + 1, :, :, :] = sample(newimages[ite + 1, :, :, :], sample_val)
+                    MASK[i + 1, :, :, :] = MAS
+                    newmasks[ite + 1, :, :, :] = sample(newmasks[ite + 1, :, :, :], sample_val)
+
+                    warping_fields[i, :, :, :] = warp_acc[i, :, :, :]
+            if ITE1 == ROU - 1:
+                result[i + 1:i + N_FRAME + 1, :, :, :] = torch.from_numpy(
+                    np.transpose(newimages[1:, :, :, :], (0, 2, 3, 1)))
+                MASK[i + 1:i + N_FRAME + 1, :, :, :] = newmasks[1:, :, :, :]
+                warping_fields[i + 1:i + N_FRAME + 1, :, :, :] = warp_acc[1, :, :, :]
             optic = modify_flow(optic, warp, grid_large)
 
         del optic, warp, mask, video
@@ -638,12 +650,8 @@ with torch.no_grad():
         totalmask = np.prod(MASK, axis=0)
         TOTAL_MAS = TOTAL_MAS * totalmask[0, :, :]
 
-        if ite2 < int(nseg) - 1:
-            lastframe = result[-1, :, :, :].copy()
-            lastmask = MASK[-1, :, :, :].copy()
-        else:
-            totalmask = np.prod(MASK, axis=0)
-            TOTAL_MAS = TOTAL_MAS * totalmask[0, :, :]
+        lastframe = result[-1, :, :, :].copy()
+        lastmask = MASK[-1, :, :, :].copy()
 
         for i in range(result.shape[0]):
             writer.write(result[i, :, :, :].astype(np.uint8))
