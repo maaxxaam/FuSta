@@ -42,7 +42,6 @@ def load_image_list(image_files):
 
 def calc_flow(img1, img2):
     with torch.no_grad():
-
         images = load_image_list([img1, img2])
         # flow_low_res not used
         _, flow_up = flow_model(images[0, None], images[1, None], iters=20)
@@ -55,13 +54,19 @@ backwarp_tenPartial = {}
 
 def backwarp(ten_input, ten_flow):
     if str(ten_flow.shape) not in backwarp_tenGrid:
-        ten_hor = torch.linspace(-1.0 + (1.0 / ten_flow.shape[3]), 1.0 - (1.0 / ten_flow.shape[3]), ten_flow.shape[3]).view(1, 1, 1, -1).expand(-1, -1, ten_flow.shape[2], -1)
-        ten_ver = torch.linspace(-1.0 + (1.0 / ten_flow.shape[2]), 1.0 - (1.0 / ten_flow.shape[2]), ten_flow.shape[2]).view(1, 1, -1, 1).expand(-1, -1, -1, ten_flow.shape[3])
+        ten_hor = torch.linspace(-1.0 + (1.0 / ten_flow.shape[3]), 1.0 - (1.0 / ten_flow.shape[3]),
+                                 ten_flow.shape[3]).view(1, 1, 1, -1).expand(-1, -1, ten_flow.shape[2], -1)
+        ten_ver = torch.linspace(-1.0 + (1.0 / ten_flow.shape[2]), 1.0 - (1.0 / ten_flow.shape[2]),
+                                 ten_flow.shape[2]).view(1, 1, -1, 1).expand(-1, -1, -1, ten_flow.shape[3])
 
         backwarp_tenGrid[str(ten_flow.shape)] = torch.cat([ten_hor, ten_ver], 1).cuda()
     # end
-    ten_flow = torch.cat([ten_flow[:, 0:1, :, :] / ((ten_input.shape[3] - 1.0) / 2.0), ten_flow[:, 1:2, :, :] / ((ten_input.shape[2] - 1.0) / 2.0)], 1)
-    return F.grid_sample(input=ten_input, grid=(backwarp_tenGrid[str(ten_flow.shape)] + ten_flow).permute(0, 2, 3, 1), mode='bilinear', padding_mode='zeros', align_corners=False)
+    ten_flow = torch.cat([ten_flow[:, 0:1, :, :] / ((ten_input.shape[3] - 1.0) / 2.0),
+                          ten_flow[:, 1:2, :, :] / ((ten_input.shape[2] - 1.0) / 2.0)], 1)
+    return F.grid_sample(input=ten_input, grid=(backwarp_tenGrid[str(ten_flow.shape)] + ten_flow).permute(0, 2, 3, 1),
+                         mode='bilinear', padding_mode='zeros', align_corners=False)
+
+
 # end
 
 
@@ -82,10 +87,10 @@ def read_flo(flo_path):
     print(flo_path)
     xv, yv = np.meshgrid(np.linspace(-1, 1, 832 + 2 * 64), np.linspace(-1, 1, 448 + 2 * 64))
     flow = np.load(flo_path)
-    flow_u = ((flow[:, :, 0] + xv) + 1.0) / 2.0 * float(832+2*64-1)
-    flow_v = ((flow[:, :, 1] + yv) + 1.0) / 2.0 * float(448+2*64-1)
-    flow_u -= ((xv + 1.0) / 2.0 * float(832+2*64-1))
-    flow_v -= ((yv + 1.0) / 2.0 * float(448+2*64-1))
+    flow_u = ((flow[:, :, 0] + xv) + 1.0) / 2.0 * float(832 + 2 * 64 - 1)
+    flow_v = ((flow[:, :, 1] + yv) + 1.0) / 2.0 * float(448 + 2 * 64 - 1)
+    flow_u -= ((xv + 1.0) / 2.0 * float(832 + 2 * 64 - 1))
+    flow_v -= ((yv + 1.0) / 2.0 * float(448 + 2 * 64 - 1))
     flow = np.stack((flow_u, flow_v), -1)
     return flow
 
@@ -123,11 +128,11 @@ if __name__ == '__main__':
     parser.add_argument('--noDL_CNNAggregation', type=int, default=0)
     parser.add_argument('--gumbel', type=int, default=0)
     parser.add_argument('--inference_with_frame_selection', type=int, default=0)
-    parser.add_argument('--FOV_expansion', type=int, default=1) 
-    parser.add_argument('--seamless', type=int, default=1) 
-    parser.add_argument('--all_backward', type=int, default=0) 
-    parser.add_argument('--bundle_forward_flow', type=int, default=0) 
-    
+    parser.add_argument('--FOV_expansion', type=int, default=1)
+    parser.add_argument('--seamless', type=int, default=1)
+    parser.add_argument('--all_backward', type=int, default=0)
+    parser.add_argument('--bundle_forward_flow', type=int, default=0)
+
     parser.add_argument('--input_frames_path', type=str)
     parser.add_argument('--warping_field_path', type=str)
     parser.add_argument('--output_path', type=str)
@@ -143,7 +148,7 @@ if __name__ == '__main__':
 
     model.eval()
     transform = transforms.Compose([transforms.ToTensor()])
-    
+
     # RAFT
     flow_model = torch.nn.DataParallel(RAFT(args))
     flow_model.load_state_dict(torch.load('raft_models/raft-things.pth'))
@@ -158,14 +163,15 @@ if __name__ == '__main__':
     GAUSSIAN_FILTER_KSIZE = args.temporal_width
     gaussian_filter = cv2.getGaussianKernel(GAUSSIAN_FILTER_KSIZE, -1)
 
-    assert (GAUSSIAN_FILTER_KSIZE-1)//2 % args.temporal_step == 0
-    
+    assert (GAUSSIAN_FILTER_KSIZE - 1) // 2 % args.temporal_step == 0
+
     with torch.no_grad():
+        import itertools
 
         os.makedirs(os.path.join(OUTPUT_PATH), exist_ok=True)
         # put all pngs in a sequence
         all_imgs = sorted(glob.glob(os.path.join(INPUT_FRAMES_PATH, '*.png')))
-        
+
         tmp_img = cv2.imread(all_imgs[0])
         H = tmp_img.shape[0]
         W = tmp_img.shape[1]
@@ -176,40 +182,50 @@ if __name__ == '__main__':
 
         first_frame = all_imgs[0]
         last_frame = all_imgs[-1]
-        all_imgs = [first_frame]*(GAUSSIAN_FILTER_KSIZE//2) + all_imgs + [last_frame]*(GAUSSIAN_FILTER_KSIZE//2)
+        all_imgs = [first_frame] * (GAUSSIAN_FILTER_KSIZE // 2) + all_imgs + [last_frame] * (GAUSSIAN_FILTER_KSIZE // 2)
 
         large_mask_chain = []
 
         output_frames = []
-        
-        for idx in range(GAUSSIAN_FILTER_KSIZE//2, (GAUSSIAN_FILTER_KSIZE//2)+original_length):
+
+        for idx in range(GAUSSIAN_FILTER_KSIZE // 2, (GAUSSIAN_FILTER_KSIZE // 2) + original_length):
             keyframe = all_imgs[idx]
             img_name = os.path.split(keyframe)[-1]
             print(img_name)
-            tenSecond = torch.FloatTensor(np.ascontiguousarray(cv2.imread(filename=keyframe, flags=-1)[..., ::-1].transpose(2, 0, 1)[None, :, :, :].astype(np.float32) * (1.0 / 255.0))).cuda()
+            tenSecond = torch.FloatTensor(np.ascontiguousarray(
+                cv2.imread(filename=keyframe, flags=-1)[..., ::-1].transpose(2, 0, 1)[None, :, :, :].astype(
+                    np.float32) * (1.0 / 255.0))).cuda()
 
             if int(img_name[:-4]) == 0:
                 tenH_inv = torch.zeros((1, 2, 448 + 2 * 64, 832 + 2 * 64)).cuda()
                 tenFlow = torch.zeros((1, 2, 448 + 2 * 64, 832 + 2 * 64)).cuda()
             else:
-                if os.path.isfile(os.path.join(CVPR2020_warping_field_path, str(int(img_name[:-4])-1).zfill(5)+'_H_inv.npy')) and os.path.isfile(os.path.join(CVPR2020_warping_field_path, str(int(img_name[:-4])-1).zfill(5)+'.npy')):
-                    tenH_inv = torch.FloatTensor(np.ascontiguousarray(read_homography(os.path.join(CVPR2020_warping_field_path, str(int(img_name[:-4])-1).zfill(5)+'_H_inv.npy')).transpose(2, 0, 1)[None, :, :, :])).cuda()
+                if os.path.isfile(os.path.join(CVPR2020_warping_field_path,
+                                               str(int(img_name[:-4]) - 1).zfill(5) + '_H_inv.npy')) and os.path.isfile(
+                        os.path.join(CVPR2020_warping_field_path, str(int(img_name[:-4]) - 1).zfill(5) + '.npy')):
+                    tenH_inv = torch.FloatTensor(np.ascontiguousarray(read_homography(
+                        os.path.join(CVPR2020_warping_field_path,
+                                     str(int(img_name[:-4]) - 1).zfill(5) + '_H_inv.npy')).transpose(2, 0, 1)[None, :,
+                                                                      :, :])).cuda()
                     if int(img_name[:-4]) == 1:
                         tenFlow = torch.zeros((1, 2, 448 + 2 * 64, 832 + 2 * 64)).cuda()
                     else:
-                        tenFlow = torch.FloatTensor(np.ascontiguousarray(read_flo(os.path.join(CVPR2020_warping_field_path, str(int(img_name[:-4])-1).zfill(5)+'.npy')).transpose(2, 0, 1)[None, :, :, :])).cuda()
+                        tenFlow = torch.FloatTensor(np.ascontiguousarray(read_flo(
+                            os.path.join(CVPR2020_warping_field_path,
+                                         str(int(img_name[:-4]) - 1).zfill(5) + '.npy')).transpose(2, 0, 1)[None, :, :,
+                                                                         :])).cuda()
                 else:
                     print('no flow data')
                     continue
 
             # calculate backward flow using inv_H and backward_flow
             tenBackFlow = backwarp(ten_input=tenH_inv, ten_flow=tenFlow)
-            totalFlowIn832 = (tenBackFlow+tenFlow)[:, :, 64:-64, 64:-64]
+            totalFlowIn832 = (tenBackFlow + tenFlow)[:, :, 64:-64, 64:-64]
             """second backward warping in full resolution"""
             W_ratio = W / 832.0
             H_ratio = H / 448.0
             totalFlow = F.upsample(totalFlowIn832, size=(H, W), mode='bilinear')
-            F_kprime_to_k = torch.stack((totalFlow[:, 0]*W_ratio, totalFlow[:, 1]*H_ratio), dim=1)
+            F_kprime_to_k = torch.stack((totalFlow[:, 0] * W_ratio, totalFlow[:, 1] * H_ratio), dim=1)
 
             sum_color = []
             sum_alpha = []
@@ -217,7 +233,8 @@ if __name__ == '__main__':
             input_flows = []
             forward_flows = []
             backward_flows = []
-            for frame_shift in range(-(GAUSSIAN_FILTER_KSIZE // 2), (GAUSSIAN_FILTER_KSIZE // 2) + 1, int(args.temporal_step)):
+            for frame_shift in range(-(GAUSSIAN_FILTER_KSIZE // 2), (GAUSSIAN_FILTER_KSIZE // 2) + 1,
+                                     int(args.temporal_step)):
                 # for frame_shift in [-5, 0, 5]:
                 ref_frame = all_imgs[idx + frame_shift]
                 ref_frame_name = os.path.split(ref_frame)[-1]
@@ -232,9 +249,9 @@ if __name__ == '__main__':
                 flow_W = list(forward_flow.size())[3]
                 if H != flow_H or W != flow_W:
                     top = (flow_H - H) // 2
-                    forward_flow = forward_flow[:, :, top:top+H]
+                    forward_flow = forward_flow[:, :, top:top + H]
                     left = (flow_W - W) // 2
-                    forward_flow = forward_flow[:, :, :, left:left+W]
+                    forward_flow = forward_flow[:, :, :, left:left + W]
                 print(forward_flow.shape)
                 forward_flows.append(forward_flow)
 
@@ -243,7 +260,9 @@ if __name__ == '__main__':
                 backward_flow[backward_flow > 448] = 0
                 backward_flow[backward_flow < (-448)] = 0"""
                 backward_flows.append(backward_flow)
-                input_frames.append(torch.FloatTensor(np.ascontiguousarray(cv2.imread(filename=ref_frame, flags=-1)[..., ::-1].transpose(2, 0, 1)[None, :, :, :].astype(np.float32) * (1.0 / 255.0))).cuda())
+                input_frames.append(torch.FloatTensor(np.ascontiguousarray(
+                    cv2.imread(filename=ref_frame, flags=-1)[..., ::-1].transpose(2, 0, 1)[None, :, :, :].astype(
+                        np.float32) * (1.0 / 255.0))).cuda())
 
             BOUND_CROP_HT = 3 + int(H % 4 == 0)
             BOUND_CROP_WD = 3 + int(W % 4 == 0)
@@ -251,14 +270,15 @@ if __name__ == '__main__':
             input_frames = [x[:, :, BOUND_CROP_HT:-BOUND_CROP_HT, BOUND_CROP_WD:-BOUND_CROP_WD] for x in input_frames]
             F_kprime_to_k = F_kprime_to_k[:, :, BOUND_CROP_HT:-BOUND_CROP_HT, BOUND_CROP_WD:-BOUND_CROP_WD]
             forward_flows = [x[:, :, BOUND_CROP_HT:-BOUND_CROP_HT, BOUND_CROP_WD:-BOUND_CROP_WD] for x in forward_flows]
-            backward_flows = [x[:, :, BOUND_CROP_HT:-BOUND_CROP_HT, BOUND_CROP_WD:-BOUND_CROP_WD] for x in backward_flows]
-                
+            backward_flows = [x[:, :, BOUND_CROP_HT:-BOUND_CROP_HT, BOUND_CROP_WD:-BOUND_CROP_WD] for x in
+                              backward_flows]
+
             frame_out = model(input_frames, F_kprime_to_k, forward_flows, backward_flows)
             """output_frames.append(frame_out.detach().cpu())"""
-            # if OOM          
+            # if OOM
             os.makedirs('tmp/', exist_ok=True)
-            np.save('tmp/'+str(len(large_mask_chain)).zfill(5), frame_out.detach().cpu().numpy())
-            output_frames.append('tmp/'+str(len(large_mask_chain)).zfill(5)+'.npy')
+            np.save('tmp/' + str(len(large_mask_chain)).zfill(5), frame_out.detach().cpu().numpy())
+            output_frames.append('tmp/' + str(len(large_mask_chain)).zfill(5) + '.npy')
 
             # blending methods
             WWW = 256
@@ -272,7 +292,8 @@ if __name__ == '__main__':
                 # padding for forward warping
                 ref_frame_flow = torch.nn.ReplicationPad2d((WWW, WWW, HHH, HHH))(forward_flows[iii])
                 # first forward warping
-                tenMaskFirst = softsplat.FunctionSoftsplat(tenInput=tenOnes, tenFlow=ref_frame_flow, tenMetric=None, strType='average')
+                tenMaskFirst = softsplat.FunctionSoftsplat(tenInput=tenOnes, tenFlow=ref_frame_flow, tenMetric=None,
+                                                           strType='average')
                 # second backward warping
                 tenMaskSecond = backwarp(ten_input=tenMaskFirst, ten_flow=F_kprime_to_k_pad)
                 # back to original resolution
@@ -286,60 +307,71 @@ if __name__ == '__main__':
 
         WWW -= BOUND_CROP_WD
         HHH -= BOUND_CROP_HT
-            
+
         from maxflow.fastmin import aexpansion_grid
+
         accumulated_motion_vectors = np.zeros((original_length, 2), np.int32)
         maximum_movement = 3
         for level in range(5, -1, -1):
             # data term / 2^3 level
-            from itertools import tee
-            data_term = np.zeros((original_length, (2*maximum_movement+1) * (2*maximum_movement+1)))
+            data_term = np.zeros((original_length, (2 * maximum_movement + 1) * (2 * maximum_movement + 1)))
             print('data term')
             for index, obj in enumerate(large_mask_chain):
                 print(index)
-                for uu , vv in tee(range(-maximum_movement, maximum_movement+1), 2):
+                for uu, vv in itertools.product(*itertools.repeat(range(-maximum_movement, maximum_movement + 1), 2)):
                     print(uu)
                     # converage term
-                    motion_vector_u = int(accumulated_motion_vectors[index, 0]+uu*(2**level))
-                    motion_vector_v = int(accumulated_motion_vectors[index, 1]+vv*(2**level))
+                    motion_vector_u = int(accumulated_motion_vectors[index, 0] + uu * (2 ** level))
+                    motion_vector_v = int(accumulated_motion_vectors[index, 1] + vv * (2 ** level))
 
-                    cropped_mask = obj[:, :, HHH+motion_vector_u:-HHH+motion_vector_u, WWW+motion_vector_v:-WWW+motion_vector_v]
+                    cropped_mask = obj[:, :, HHH + motion_vector_u:-HHH + motion_vector_u,
+                                   WWW + motion_vector_v:-WWW + motion_vector_v]
 
                     summed_mask = (torch.sum(1.0 - cropped_mask)).cpu().numpy()
 
                     # fidelity term
-                    data_term[index, (uu+maximum_movement)*(2*maximum_movement+1)+vv+maximum_movement] = summed_mask
+                    data_term[index, (uu + maximum_movement) * (
+                                2 * maximum_movement + 1) + vv + maximum_movement] = summed_mask
 
             print('smoothness term')
-            smoothness_term = np.zeros(((2*maximum_movement+1) * (2*maximum_movement+1), (2*maximum_movement+1) * (2*maximum_movement+1)))
-            for uu, vv, uuuu, vvvv in tee(list(range(-maximum_movement, maximum_movement + 1)), 4):
+            smoothness_term = np.zeros(((2 * maximum_movement + 1) * (2 * maximum_movement + 1),
+                                        (2 * maximum_movement + 1) * (2 * maximum_movement + 1)))
+            for uu, vv, uuuu, vvvv in itertools.product(
+                    *itertools.repeat(range(-maximum_movement, maximum_movement + 1), 4)):
                 print(uu, vv)
-                smoothness_term[(uu+maximum_movement)*(2*maximum_movement+1)+vv+maximum_movement, (uuuu+maximum_movement)*(2*maximum_movement+1)+vvvv+maximum_movement] = (((uu-uuuu)*(2**level))**2 + ((vv-vvvv)*(2**level))**2)
+                smoothness_term[(uu + maximum_movement) * (2 * maximum_movement + 1) + vv + maximum_movement, (
+                            uuuu + maximum_movement) * (2 * maximum_movement + 1) + vvvv + maximum_movement] = (
+                            ((uu - uuuu) * (2 ** level)) ** 2 + ((vv - vvvv) * (2 ** level)) ** 2)
 
             alpha = 100.0
-            labels = aexpansion_grid(data_term,smoothness_term*alpha)  #  [H, W]
+            labels = aexpansion_grid(data_term, smoothness_term * alpha)  # [H, W]
             for iiii in range(labels.shape[0]):
-                accumulated_motion_vectors[iiii, 0] += (labels[iiii]//(2*maximum_movement+1) - maximum_movement)*(2**level)
-                accumulated_motion_vectors[iiii, 1] += (labels[iiii]%(2*maximum_movement+1) - maximum_movement)*(2**level)
+                accumulated_motion_vectors[iiii, 0] += (labels[iiii] // (
+                            2 * maximum_movement + 1) - maximum_movement) * (2 ** level)
+                accumulated_motion_vectors[iiii, 1] += (labels[iiii] % (
+                            2 * maximum_movement + 1) - maximum_movement) * (2 ** level)
             print(accumulated_motion_vectors)
         print(accumulated_motion_vectors)
         np.savetxt("motion_vector.csv", accumulated_motion_vectors, delimiter=",")
-        
+
         loss = 0.0
         for index, obj in enumerate(large_mask_chain):
             motion_vector_u = int(accumulated_motion_vectors[index, 0])
             motion_vector_v = int(accumulated_motion_vectors[index, 1])
-            cropped_mask = obj[:, :, HHH+motion_vector_u:-HHH+motion_vector_u, WWW+motion_vector_v:-WWW+motion_vector_v]
+            cropped_mask = obj[:, :, HHH + motion_vector_u:-HHH + motion_vector_u,
+                           WWW + motion_vector_v:-WWW + motion_vector_v]
             print(motion_vector_u)
             print(motion_vector_v)
             print(cropped_mask.shape)
             # if OOM
-            imwrite(torch.from_numpy(np.load(output_frames[index]))[:, :, HHH+motion_vector_u:-HHH+motion_vector_u, WWW+motion_vector_v:-WWW+motion_vector_v], os.path.join(OUTPUT_PATH, str(index+1).zfill(5)+'.png'), range=(0, 1))
-            
+            imwrite(torch.from_numpy(np.load(output_frames[index]))[:, :, HHH + motion_vector_u:-HHH + motion_vector_u,
+                    WWW + motion_vector_v:-WWW + motion_vector_v],
+                    os.path.join(OUTPUT_PATH, str(index + 1).zfill(5) + '.png'), range=(0, 1))
+
             summed_mask = (torch.sum(1.0 - cropped_mask)).cpu().numpy()
             loss += summed_mask
         print(loss)
-        
+
         # loss without adjustment
         loss = 0.0
         for _, obj in enumerate(large_mask_chain):

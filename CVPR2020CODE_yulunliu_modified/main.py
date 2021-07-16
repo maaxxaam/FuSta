@@ -197,22 +197,25 @@ def compute_flow_seg(frame_list, h, start):
         im1 = np.concatenate((np.zeros((MARGIN, 832, 3)), im1, np.zeros((MARGIN, 832, 3))), axis=0)
         im1 = np.concatenate((np.zeros((des_ht, MARGIN, 3)), im1, np.zeros((des_ht, MARGIN, 3))), axis=1)
         im1 = im1.astype(np.uint8)
-        warped_video[i, :, :, :] = torch.from_numpy(cv2.warpPerspective(im1, h[start + i, :, :], (des_ht, des_wd)))
-        mask[i, :, :] = torch.from_numpy(cv2.warpPerspective(mask_towarp, h[start + i, :, :], (des_ht, des_wd)))
+        warped_video[i, :, :, :] = torch.from_numpy(cv2.warpPerspective(im1, h[start + i, :, :], (des_wd, des_ht)))
+        mask[i, :, :] = torch.from_numpy(cv2.warpPerspective(mask_towarp, h[start + i, :, :], (des_wd, des_ht)))
         ss, ss_person = compute_mask(frame_list[i, :, :, :])
         ss = np.concatenate((np.zeros((MARGIN, 832)), ss.numpy(), np.zeros((MARGIN, 832))), axis=0)
         ss_person = np.concatenate((np.zeros((MARGIN, 832)), ss_person.numpy(), np.zeros((MARGIN, 832))), axis=0)
         ss = np.concatenate((np.zeros((des_ht, MARGIN)), ss, np.zeros((des_ht, MARGIN))), axis=1)
         ss_person = np.concatenate((np.zeros((des_ht, MARGIN)), ss_person, np.zeros((des_ht, MARGIN))), axis=1)
-        optic[i, 2, :, :] = torch.from_numpy(cv2.warpPerspective(ss, h[start + i, :, :], (des_ht, des_wd)))
-        mask_object[i, :, :] = torch.from_numpy(cv2.warpPerspective(ss_person, h[start + i, :, :], (des_ht, des_wd)))
+        optic[i, 2, :, :] = torch.from_numpy(cv2.warpPerspective(ss, h[start + i, :, :], (des_wd, des_ht)))
+        mask_object[i, :, :] = torch.from_numpy(cv2.warpPerspective(ss_person, h[start + i, :, :], (des_wd, des_ht)))
 
     warped_video = np.concatenate((warped_video.numpy(), np.tile(np.expand_dims(warped_video[-1, :, :, :].numpy(), 0), (N_FRAME, 1, 1, 1))), 0)
     mask = np.concatenate((mask.numpy(), np.tile(np.expand_dims(mask[-1, :, :].numpy(), 0), (N_FRAME, 1, 1))), 0)
 
     for i in range(frame_list.shape[0] - 1):
-        inp[:, :, 0, :, :] = float_cuda(torch.from_numpy(warped_video[i + 1, :, :, :])).permute((2, 0, 1)).unsqueeze(0)
-        inp[:, :, 1, :, :] = float_cuda(torch.from_numpy(warped_video[i, :, :, :])).permute((2, 0, 1)).unsqueeze(0)
+        #print(warped_video.shape)
+        #print(warped_video[i, :, :, :].shape)
+        #print(float_cuda(torch.from_numpy(warped_video[i, :, :, :])).shape)
+        inp[:, :, 0, :, :] = torch.from_numpy(warped_video[i + 1, :, :, :]).float().cuda().permute((2, 0, 1)).unsqueeze(0)
+        inp[:, :, 1, :, :] = torch.from_numpy(warped_video[i, :, :, :]).float().cuda().permute((2, 0, 1)).unsqueeze(0)
         out = flow_model(inp) * 2
         flow = out[0].cpu().permute(1, 2, 0).numpy()
 
@@ -424,7 +427,7 @@ with torch.no_grad():
     yv = np.expand_dims(yv, axis=2)
     grid = np.expand_dims(np.concatenate((xv, yv), axis=2), axis=0)
     grid_large = np.repeat(grid, 1, axis=0)
-    grid_large = Variable(float_cuda(torch.from_numpy(grid_large)), requires_grad=False)
+    grid_large = Variable(torch.from_numpy(grid_large).float().cuda(), requires_grad=False)
 
     xv, yv = np.meshgrid(np.linspace(1, 832, 832), np.linspace(1, 448, 448))
     xv = np.expand_dims(xv, axis=2)
@@ -556,8 +559,8 @@ with torch.no_grad():
                 else:
                     result[0, :, :, :] = torch.from_numpy(video[0, :, :, :])
                 warping_fields[0, :, :, :] = warp_acc[0, :, :, :]
-                result[0 + 1, :, :, :] = newimages.permute(0, 2, 3, 1)
-                MASK[0 + 1, :, :, :] = MAS
+                result[1, :, :, :] = newimages.permute(0, 2, 3, 1)
+                MASK[1, :, :, :] = MAS
 
             for i in range(1, video.shape[0] - N_FRAME - 1):
                 optic_temp = optic[i:i + N_FRAME, :, :, :].cuda()
