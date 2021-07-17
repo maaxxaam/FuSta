@@ -119,6 +119,7 @@ class FlowAugmentor:
 
         return img1, img2, flow
 
+
 class SparseFlowAugmentor:
     def __init__(self, crop_size, min_scale=-0.2, max_scale=0.5, do_flip=False):
         # spatial augmentation params
@@ -231,7 +232,6 @@ class SparseFlowAugmentor:
         flow = flow[y0:y0+self.crop_size[0], x0:x0+self.crop_size[1]]
         valid = valid[y0:y0+self.crop_size[0], x0:x0+self.crop_size[1]]
         return img1, img2, flow, valid
-
 
     def __call__(self, img1, img2, flow, valid):
         img1, img2 = self.color_transform(img1, img2)

@@ -11,7 +11,8 @@ import torch
 from PIL import Image
 from torchvision import transforms
 from torchvision.utils import save_image as imwrite
-from raft import RAFT
+# from raft import RAFT
+from sparsenet import SparseNet
 from utils.utils import InputPadder
 
 import torch.nn.functional as F
@@ -44,7 +45,7 @@ def calc_flow(img1, img2):
     with torch.no_grad():
         images = load_image_list([img1, img2])
         # flow_low_res not used
-        _, flow_up = flow_model(images[0, None], images[1, None], iters=20)
+        flow_up = flow_model(images[0, None], images[1, None], iters=20)
     return flow_up.detach()
 
 
@@ -150,8 +151,8 @@ if __name__ == '__main__':
     transform = transforms.Compose([transforms.ToTensor()])
 
     # RAFT
-    flow_model = torch.nn.DataParallel(RAFT(args))
-    flow_model.load_state_dict(torch.load('raft_models/raft-things.pth'))
+    flow_model = torch.nn.DataParallel(SparseNet(args))
+    flow_model.load_state_dict(torch.load('checkpoints/scv-things.pth'))
     flow_model = flow_model.module
     flow_model.to('cuda')
     flow_model.eval()
