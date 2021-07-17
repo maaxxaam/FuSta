@@ -246,7 +246,7 @@ if __name__ == '__main__':
                 if cache is None:
                     print("Calculating flow...")
                     forward_flow = calc_flow(ref_frame, keyframe)
-                    flow_cache.setdefault(d_id, (flow_for, forward_flow))
+                    flow_cache.setdefault(d_id, forward_flow)
                 else:
                     print("Using cached flow!")
                     forward_flow = cache
@@ -269,7 +269,7 @@ if __name__ == '__main__':
                 if cache is None:
                     print("Calculating flow...")
                     backward_flow = calc_flow(keyframe, ref_frame)
-                    flow_cache.setdefault(d_id, (flow_back, backward_flow))
+                    flow_cache.setdefault(d_id, backward_flow)
                 else:
                     print("Using cached flow!")
                     backward_flow = cache 
