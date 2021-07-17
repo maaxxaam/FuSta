@@ -188,7 +188,7 @@ if __name__ == '__main__':
         all_imgs = [first_frame] * (GAUSSIAN_FILTER_KSIZE // 2) + all_imgs + [last_frame] * (GAUSSIAN_FILTER_KSIZE // 2)
 
         large_mask_chain = []
-
+        flow_cache = dict()
         output_frames = []
 
         for idx in range(GAUSSIAN_FILTER_KSIZE // 2, (GAUSSIAN_FILTER_KSIZE // 2) + original_length):
@@ -241,7 +241,15 @@ if __name__ == '__main__':
                 # for frame_shift in [-5, 0, 5]:
                 ref_frame = all_imgs[idx + frame_shift]
                 ref_frame_name = os.path.split(ref_frame)[-1]
-                forward_flow = calc_flow(ref_frame, keyframe)
+                d_id = str(idx) + '+' + str(idx + frame_shift)
+                cache = flow_cache.pop(d_id, None)
+                if cache is None:
+                    print("Calculating flow...")
+                    forward_flow = calc_flow(ref_frame, keyframe)
+                    flow_cache.setdefault(d_id, (flow_for, forward_flow))
+                else:
+                    print("Using cached flow!")
+                    forward_flow = cache
 
                 # somtimes flow encounters nan or very large values
                 """forward_flow[forward_flow != forward_flow] = 0
@@ -255,14 +263,21 @@ if __name__ == '__main__':
                     forward_flow = forward_flow[:, :, top:top + H]
                     left = (flow_W - W) // 2
                     forward_flow = forward_flow[:, :, :, left:left + W]
-                print(forward_flow.shape)
                 forward_flows.append(forward_flow)
-
-                backward_flow = calc_flow(keyframe, ref_frame)
+                d_id = str(idx + frame_shift) + '+' + str(idx)
+                cache = flow_cache.pop(d_id, None)
+                if cache is None:
+                    print("Calculating flow...")
+                    backward_flow = calc_flow(keyframe, ref_frame)
+                    flow_cache.setdefault(d_id, (flow_back, backward_flow))
+                else:
+                    print("Using cached flow!")
+                    backward_flow = cache 
                 """backward_flow[backward_flow != backward_flow] = 0
                 backward_flow[backward_flow > 448] = 0
                 backward_flow[backward_flow < (-448)] = 0"""
                 backward_flows.append(backward_flow)
+                print(forward_flow.shape)
                 input_frames.append(torch.FloatTensor(np.ascontiguousarray(
                     cv2.imread(filename=ref_frame, flags=-1)[..., ::-1].transpose(2, 0, 1)[None, :, :, :].astype(
                         np.float32) * (1.0 / 255.0))).cuda())
