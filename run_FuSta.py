@@ -139,7 +139,9 @@ if __name__ == '__main__':
     parser.add_argument('--output_path', type=str)
     parser.add_argument('--temporal_width', type=int, default=41)
     parser.add_argument('--temporal_step', type=int, default=4)
-
+    parser.add_argument('--num_k', type=int, default=8,
+                        help='number of hypotheses to compute for knn Faiss')
+    parser.add_argument('--mixed_precision', default=True, help='use mixed precision')
     args = parser.parse_args()
 
     model = models_arbitrary.Model(args)
@@ -380,5 +382,6 @@ if __name__ == '__main__':
             summed_mask = (torch.sum(1.0 - cropped_mask)).cpu().numpy()
             loss += summed_mask
         print(loss)
+
 
 
